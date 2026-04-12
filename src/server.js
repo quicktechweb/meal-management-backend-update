@@ -52,12 +52,13 @@ const locationRoute = require("./routers/location.router");
 const rolesRoute = require("./routers/role.router");
 
 const permissionsRoute = require("./routers/permission.router");
+const connectDB = require("./connectdb");
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
-
+connectDB();
 app.use(morgan("dev"));
 
 app.get("/", (req, res) => {
@@ -138,13 +139,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-mongoose
-  .connect(process.env.MONGO_URL)
-  .then(() => {
-    app.listen(5000, "0.0.0.0", () => {
-      console.log("Server running on port 5000");
-    });
-  })
-  .catch((err) => {
-    console.error("MongoDB connection failed:", err);
-  });
+// mongoose
+//   .connect(process.env.MONGO_URL)
+//   .then(() => {
+//     app.listen(5000, "0.0.0.0", () => {
+//       console.log("Server running on port 5000");
+//     });
+//   })
+//   .catch((err) => {
+//     console.error("MongoDB connection failed:", err);
+//   });
