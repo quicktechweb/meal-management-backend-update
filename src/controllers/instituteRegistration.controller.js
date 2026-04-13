@@ -351,7 +351,7 @@ const instituteUserRegistration = async (req, res) => {
     const newUser = await InstituteRegistration.create({
       email: data.email || null,
       phone: data.phone || null,
-      role: "institute_user",
+      role: "user",
       approval_status: "pending",
       institute_id: data.institute_id,
       information: {
@@ -404,7 +404,7 @@ const getPendingInstituteUser = async (req, res) => {
 
   try {
     const users = await InstituteRegistration.find({
-      role: "institute_user",
+      role: "user",
       institute_id: user._id,
     }).populate();
 
@@ -425,7 +425,7 @@ const getApprovedInstituteUser = async (req, res) => {
 
   try {
     const users = await InstituteRegistration.find({
-      role: "institute_user",
+      role: "user",
       institute_id: user._id,
       approval_status: "approved",
     }).populate();
