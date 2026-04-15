@@ -2,3 +2,4 @@
 *.local
 package-lock.json
 .env
+.vercel

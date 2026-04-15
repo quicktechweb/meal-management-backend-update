@@ -84,4 +84,8 @@ router.patch(
   },
 );
 
+router.post("/institute-user-add", (req, res) => {
+  
+});
+
 module.exports = router;

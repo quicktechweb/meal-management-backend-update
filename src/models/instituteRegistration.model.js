@@ -203,6 +203,12 @@ const instituteRegistrationSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+
+    added_by: {
+      type: String,
+      enum: ["self", "admin"],
+      default: "self",
+    },
   },
   { timestamps: true },
 );

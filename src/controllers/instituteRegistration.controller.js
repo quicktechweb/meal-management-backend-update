@@ -327,7 +327,7 @@ const instituteUserRegistration = async (req, res) => {
   try {
     const data = req.body;
 
-    if (!data.email || !data.phone) {
+    if (!data.email && !data.phone) {
       return res.status(400).json({
         success: false,
         message: "Email or phone is required",
@@ -348,12 +348,21 @@ const instituteUserRegistration = async (req, res) => {
     // password hash
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
+    //  determine added_by
+    const addedBy = data.added_by || "self";
+
+    // approval logic
+    const approvalStatus = addedBy === "admin" ? "approved" : "pending";
+
     const newUser = await InstituteRegistration.create({
       email: data.email || null,
       phone: data.phone || null,
       role: "user",
-      approval_status: "pending",
+      added_by: addedBy,
+      approval_status: approvalStatus,
+      approved_at: addedBy === "admin" ? new Date() : null,
       institute_id: data.institute_id,
+
       information: {
         full_name: data.full_name,
         nickname: data.nickname,
@@ -364,7 +373,6 @@ const instituteUserRegistration = async (req, res) => {
         relation_with_guardian: data.relation_with_guardian,
         guardian_contact_number: data.guardian_contact_number,
         gender: data.gender,
-        documents: data.documents,
         religion: data.religion,
         date_of_birth: data.date_of_birth,
         country: data.country,
@@ -376,18 +384,20 @@ const instituteUserRegistration = async (req, res) => {
         company: data.company,
         designation: data.designation,
         year: data.year,
-        documents: data.documents,
         name_of_the_institute: data.name_of_the_institute,
         name_of_the_mess: data.name_of_the_mess,
         name_of_the_hall: data.name_of_the_hall,
         password: hashedPassword,
+        documents: data.documents,
       },
     });
 
     res.status(201).json({
       success: true,
       message:
-        "Institute user registered successfully, Waiting for institute admin approval.",
+        addedBy === "admin"
+          ? "User created and approved by admin"
+          : "Registered successfully, waiting for admin approval",
 
       data: newUser,
     });
