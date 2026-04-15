@@ -5,7 +5,9 @@ const {
   seedPermissions,
 } = require("../controllers/permission.controller");
 
-router.get("/permissions", getPermissions);
+const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
+
+router.get("/permissions", instituteRequireAuth, getPermissions);
 
 router.post("/permissions/seed", seedPermissions);
 

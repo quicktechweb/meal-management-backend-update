@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-
+const InstituteRegistration = require("../models/instituteRegistration.model");
 const {
   instituteRegistration,
   getPendingInstitutes,
@@ -52,6 +52,36 @@ router.patch(
   "/instituteuser/:id",
   instituteRequireAuth,
   updateInstituteUserData,
+);
+
+router.patch(
+  "/instituteuser-role-update",
+  instituteRequireAuth,
+  async (req, res) => {
+    try {
+      const { user_ids, role } = req.body;
+
+      if (!user_ids || !role) {
+        return res
+          .status(400)
+          .json({ message: "user_ids and role are required" });
+      }
+
+      const ids = Array.isArray(user_ids) ? user_ids : [user_ids];
+
+      await InstituteRegistration.updateMany(
+        { _id: { $in: ids } },
+        { role: role },
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Roles updated successfully",
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  },
 );
 
 module.exports = router;

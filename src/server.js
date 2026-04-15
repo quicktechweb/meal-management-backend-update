@@ -1,6 +1,8 @@
 require("@dotenvx/dotenvx").config();
 
 const cors = require("cors");
+const dns = require("dns").promises;
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 const express = require("express");
 const morgan = require("morgan");
@@ -149,3 +151,9 @@ app.use((err, req, res, next) => {
 //   .catch((err) => {
 //     console.error("MongoDB connection failed:", err);
 //   });
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(` Server running on port ${PORT}`);
+});
