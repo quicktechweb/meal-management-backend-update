@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const InstituteRegistration = require("../models/instituteRegistration.model");
+
+const Role = require("../models/role.model");
+
 const {
   instituteRegistration,
   getPendingInstitutes,
@@ -89,6 +92,42 @@ router.delete(
   "/instituteuser-delete",
   instituteRequireAuth,
   deleteInstituteUser,
+);
+
+router.get(
+  "/individual-user-role-permission",
+  instituteRequireAuth,
+  async (req, res) => {
+    try {
+      const user = req.user;
+
+      const roles = await Role.find({
+        institute_id: user.institute_id,
+      }).populate("permissions");
+
+      const individual_user_role_permission = roles?.find(
+        (role) => role?.name?.toLowerCase() === user?.role?.toLowerCase(),
+      );
+
+      if (!individual_user_role_permission) {
+        return res.status(404).json({
+          success: false,
+          message: "Role not found for this user",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: individual_user_role_permission,
+      });
+    } catch (error) {
+      console.error("Error fetching role permissions:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  },
 );
 
 module.exports = router;

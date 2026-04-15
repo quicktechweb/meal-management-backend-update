@@ -13,7 +13,7 @@ const createRole = async (req, res) => {
     }
 
     const role = await Role.create({
-      name,
+      name: name.toLowerCase(),
       institute_id: user?._id,
       permissions: permissions || [],
     });

@@ -4,7 +4,7 @@ const InstituteRegistration = require("../models/instituteRegistration.model");
 const instituteRequireAuth = async (req, res, next) => {
   const { authorization } = req.headers;
 
-  if (!authorization) {
+  if (!authorization || !authorization.startsWith("Bearer ")) {
     return res.status(401).json({
       success: false,
       error: "Authorization token required",
@@ -16,17 +16,35 @@ const instituteRequireAuth = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.Secret);
 
-    let user;
+    const user = await InstituteRegistration.findById(decoded.id).select(
+      "-password",
+    );
 
-    user = await InstituteRegistration.findById(decoded.id).select("-password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "User no longer exists",
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        error: "Institute account is deactivated",
+      });
+    }
 
     req.user = user;
-
-    
-
     next();
   } catch (error) {
-    res.status(401).json({
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        error: "Token has expired",
+      });
+    }
+
+    return res.status(401).json({
       success: false,
       error: "Request is not authorized",
     });
