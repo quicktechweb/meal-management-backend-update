@@ -414,7 +414,6 @@ const getPendingInstituteUser = async (req, res) => {
 
   try {
     const users = await InstituteRegistration.find({
-      role: "user",
       institute_id: user._id,
     }).populate();
 
@@ -435,7 +434,6 @@ const getApprovedInstituteUser = async (req, res) => {
 
   try {
     const users = await InstituteRegistration.find({
-      role: "user",
       institute_id: user._id,
       approval_status: "approved",
     }).populate();
@@ -574,6 +572,44 @@ const userInstituteAdminData = async (req, res) => {
   }
 };
 
+const deleteInstituteUser = async (req, res) => {
+  try {
+    const user = req.user;
+
+    const { user_ids, institute_id } = req.body;
+
+    if (institute_id !== user?._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized action",
+      });
+    }
+
+    if (!user_ids) {
+      return res
+        .status(400)
+        .json({ message: "user_ids and role are required" });
+    }
+
+    const ids = Array.isArray(user_ids) ? user_ids : [user_ids];
+
+    const result = await InstituteRegistration.deleteMany({
+      _id: { $in: ids },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} Users deleted successfully`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   instituteRegistration,
   instituteLogin,
@@ -587,4 +623,5 @@ module.exports = {
   updateInstituteUserData,
   userInstituteAdminData,
   getApprovedInstituteUser,
+  deleteInstituteUser,
 };

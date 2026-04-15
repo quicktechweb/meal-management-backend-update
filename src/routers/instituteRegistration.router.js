@@ -15,6 +15,7 @@ const {
   updateInstituteUserData,
   userInstituteAdminData,
   getApprovedInstituteUser,
+  deleteInstituteUser,
 } = require("../controllers/instituteRegistration.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 
@@ -84,8 +85,10 @@ router.patch(
   },
 );
 
-router.post("/institute-user-add", (req, res) => {
-  
-});
+router.delete(
+  "/instituteuser-delete",
+  instituteRequireAuth,
+  deleteInstituteUser,
+);
 
 module.exports = router;
