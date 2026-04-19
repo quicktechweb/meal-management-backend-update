@@ -10,9 +10,6 @@ const createToken = (id) => {
 const instituteRegistration = async (req, res) => {
   try {
     const data = req.body;
-
-    console.log(data);
-
     // update step 2 ,step 3 ,step 4
     if (data.userId) {
       const updateData = {
@@ -500,10 +497,13 @@ const approveInstituteUser = async (req, res) => {
 };
 
 const getInsituteUserData = async (req, res) => {
+  const user = req.user;
+
   try {
     res.status(200).json({
       success: true,
-      user: req.user,
+      user: user,
+      tokenInfo: req.tokenData,
     });
   } catch (error) {
     res.status(500).json({

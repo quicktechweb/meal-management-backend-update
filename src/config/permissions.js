@@ -38,11 +38,10 @@ const PERMISSIONS = [
   // { name: "Export Reports", slug: "reports.export", module: "Reports" },
 
   // ─── Settings ──────────────────────────────────────────────
-  { name: "View Settings", slug: "settings.view", module: "Settings" },
-  { name: "Edit Settings", slug: "settings.edit", module: "Settings" },
+  { name: "View Profile", slug: "profile.view", module: "Profile" },
+  { name: "Edit Profile", slug: "profile.edit", module: "Profile" },
 
   // service
-
   {
     name: "View Services",
     slug: "services.view",
@@ -66,5 +65,9 @@ const PERMISSIONS = [
     module: "Routine",
   },
 ];
+const DEFAULT_ROLE_PERMISSIONS = {
+  institute: ["all"],
+  user: ["routine.view", "settings.view", "orders.view"],
+};
 
-module.exports = PERMISSIONS;
+module.exports = { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS };

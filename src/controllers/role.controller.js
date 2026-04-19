@@ -1,6 +1,40 @@
 const Role = require("../models/role.model");
+const DEFAULT_ROLE_PERMISSIONS = require("../config/permissions");
+const Permission = require("../models/permission.model");
 
 // Create Role for a specific Institute
+// const createRole = async (req, res) => {
+//   const user = req.user;
+//   try {
+//     const { name, permissions } = req.body;
+
+//     if (!name || !user?._id) {
+//       return res
+//         .status(400)
+//         .json({ error: "Name and Institute ID are required" });
+//     }
+
+//     const role = await Role.create({
+//       name: name.toLowerCase(),
+//       institute_id: user?._id,
+//       permissions: permissions || [],
+//     });
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Role created Successfully",
+//       role: role,
+//     });
+//   } catch (err) {
+//     if (err.code === 11000) {
+//       return res
+//         .status(400)
+//         .json({ message: "This role already exists for this institute." });
+//     }
+//     res.status(400).json({ error: err.message });
+//   }
+// };
+
 const createRole = async (req, res) => {
   const user = req.user;
   try {
@@ -12,16 +46,38 @@ const createRole = async (req, res) => {
         .json({ error: "Name and Institute ID are required" });
     }
 
+    const normalizedName = name.toLowerCase();
+
+    // ── Default permissions resolve করো ──
+    let resolvedPermissionIds = permissions || [];
+
+    const defaultSlugs = DEFAULT_ROLE_PERMISSIONS[normalizedName];
+
+    if (defaultSlugs && resolvedPermissionIds.length === 0) {
+      let defaultPerms;
+
+      if (defaultSlugs.includes("all")) {
+        defaultPerms = await Permission.find({}, "_id");
+      } else {
+        defaultPerms = await Permission.find(
+          { slug: { $in: defaultSlugs } },
+          "_id",
+        );
+      }
+
+      resolvedPermissionIds = defaultPerms.map((p) => p._id);
+    }
+
     const role = await Role.create({
-      name: name.toLowerCase(),
-      institute_id: user?._id,
-      permissions: permissions || [],
+      name: normalizedName,
+      institute_id: user._id,
+      permissions: resolvedPermissionIds,
     });
 
     res.status(201).json({
       success: true,
-      message: "Role created Successfully",
-      role: role,
+      message: "Role created successfully",
+      role,
     });
   } catch (err) {
     if (err.code === 11000) {
