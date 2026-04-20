@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   allwiseCreateUserMeal,
+  allwiseGetUserMeal,
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 
@@ -11,5 +12,7 @@ router.post(
   instituteRequireAuth,
   allwiseCreateUserMeal,
 );
+
+router.get("/allwise-user-meal-list", instituteRequireAuth, allwiseGetUserMeal);
 
 module.exports = router;
