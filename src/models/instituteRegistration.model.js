@@ -168,18 +168,14 @@ const instituteRegistrationSchema = new mongoose.Schema(
           end_time: String,
           package_item: [
             {
-              _id: false,
-              item_id: String,
               title: String,
-              image: String,
-              video: String,
-              ingridents: String,
             },
           ],
-          alternative_items: {
-            type: [mongoose.Schema.Types.Mixed],
-            default: [],
-          },
+          alternative_items: [
+            {
+              title: String,
+            },
+          ],
         },
       ],
     },
