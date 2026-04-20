@@ -16,23 +16,13 @@ const packageSchema = new mongoose.Schema(
     },
     items: [
       {
-        _id:String,
         title: String,
-        image: String,
-        video: String,
-        ingridents: String,
       },
     ],
     alternative_items: [
-      [
-        {
-          _id:String,
-          title: String,
-          image: String,
-          video: String,
-          ingridents: String,
-        },
-      ],
+      {
+        title: String,
+      },
     ],
   },
   { timestamps: true },
