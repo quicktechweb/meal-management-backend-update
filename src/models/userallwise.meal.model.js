@@ -12,6 +12,8 @@ const userAllWiseMealSchema = new mongoose.Schema(
         day: String,
         meal_type: String,
         package_price: Number,
+        start_time: String,
+        end_time: String,
         is_on: Boolean,
         selected_items: [
           {

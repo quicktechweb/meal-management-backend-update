@@ -1,6 +1,12 @@
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
 const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 
+const Institutemealonofftime = require("../models/institutemealonoff.model");
+
+const formatCutoff = require("../config/formatCutoff");
+
+const checkMealTimeStatus = require("../config/checkMealTimeStatus");
+
 const allwiseCreateUserMeal = async (req, res) => {
   try {
     const { type, meals, routine_type } = req.body;
@@ -17,10 +23,22 @@ const allwiseCreateUserMeal = async (req, res) => {
       });
     }
 
-    // ✅ Request এ আসা meals থেকে সব day বের করো
+    // Institute meal_on_off_time আনো
+    const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
+    const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
+
+    // Existing document আনো
+    const existingDoc = await UserAllWiseMeal.findOne({
+      user_id,
+      institute_id,
+      type,
+      routine_type,
+      uid,
+    });
+
+    // DayWise conflict check
     const incomingDays = meals.map((m) => m.day).filter(Boolean);
 
-    // ✅ DayWise এ ওই user এর ওই day গুলোতে meal আছে কিনা check করো
     const existingDayWiseMeal = await UserDayWiseMeal.findOne({
       user_id,
       institute_id,
@@ -43,16 +61,136 @@ const allwiseCreateUserMeal = async (req, res) => {
       });
     }
 
+    // Current time in minutes
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const validMeals = [];
+    const errors = [];
+    const mealStatuses = [];
+
+    for (const incomingMeal of meals) {
+      const { day, meal_type, is_on } = incomingMeal;
+
+      const dbMeal = existingDoc?.meals?.find(
+        (m) => m.day === day && m.meal_type === meal_type,
+      );
+
+      const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
+      const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
+
+      // নতুন meal হলেও / existing meal হলেও time check করো
+      const isOnChanging = dbMeal
+        ? is_on !== undefined && is_on !== dbMeal.is_on
+        : is_on === true; // নতুন meal এ is_on: true দিলেই check করো
+
+      if (isOnChanging) {
+        const { zone, startMinutes } = checkMealTimeStatus(
+          start_time,
+          end_time,
+          meal_on_off_time,
+          currentMinutes,
+        );
+
+        if (zone === "meal_over") {
+          errors.push({
+            day,
+            meal_type,
+            start_time,
+            end_time,
+            status: "meal_over",
+            message: `${meal_type} is already over (ended at ${end_time})`,
+          });
+          mealStatuses.push({
+            day,
+            meal_type,
+            start_time,
+            end_time,
+            status: "meal_over",
+            message: `${meal_type} already over (ended at ${end_time})`,
+          });
+          validMeals.push({
+            ...incomingMeal,
+            is_on: dbMeal ? dbMeal.is_on : false,
+          });
+          continue;
+        }
+
+        if (zone === "time_over") {
+          errors.push({
+            day,
+            meal_type,
+            start_time,
+            end_time,
+            status: "time_over",
+            message: `${meal_type} (${start_time}) on/off time is over. Cutoff was ${meal_on_off_time} hour(s) before start`,
+          });
+          mealStatuses.push({
+            day,
+            meal_type,
+            start_time,
+            end_time,
+            status: "time_over",
+            message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
+          });
+          validMeals.push({
+            ...incomingMeal,
+            is_on: dbMeal ? dbMeal.is_on : false,
+          });
+          continue;
+        }
+      }
+
+      // ✅ Allow zone
+      validMeals.push(incomingMeal);
+      mealStatuses.push({
+        day,
+        meal_type,
+        start_time,
+        end_time,
+        status: dbMeal ? "updated" : "new",
+        message: dbMeal
+          ? `${meal_type} updated successfully`
+          : `${meal_type} added successfully`,
+      });
+    }
+
     const updatedMeal = await UserAllWiseMeal.findOneAndUpdate(
       { user_id, institute_id, type, routine_type, uid },
-      { $set: { meals } },
+      { $set: { meals: validMeals } },
       { returnDocument: "after", upsert: true },
     );
 
+    // meals এর সাথে status merge করো
+    const mealsWithStatus = updatedMeal.meals.map((meal) => {
+      const statusInfo = mealStatuses.find(
+        (s) => s.day === meal.day && s.meal_type === meal.meal_type,
+      );
+      return {
+        ...meal.toObject(),
+        status: statusInfo?.status ?? "updated",
+        status_message:
+          statusInfo?.message ?? `${meal.meal_type} updated successfully`,
+      };
+    });
+
+    // response message তৈরি করো
+    const timeOverMeals = errors
+      .map((e) => `${e.meal_type} (${e.start_time})`)
+      .join(", ");
+
+    const responseMessage = errors.length
+      ? `${timeOverMeals} on/off time is over`
+      : "Meals updated successfully";
+
     return res.status(200).json({
       success: true,
-      message: "Meal Added Successfully",
-      data: updatedMeal,
+      message: responseMessage,
+      data: {
+        ...updatedMeal.toObject(),
+        meals: mealsWithStatus,
+      },
+      ...(errors.length && { errors }),
     });
   } catch (err) {
     res.status(500).json({

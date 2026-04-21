@@ -55,6 +55,8 @@ const locationRoute = require("./routers/location.router");
 
 const rolesRoute = require("./routers/role.router");
 
+const mealOnOffRoute = require("./routers/institutemealonoff.router");
+
 const permissionsRoute = require("./routers/permission.router");
 const connectDB = require("./connectdb");
 
@@ -114,6 +116,8 @@ app.use("/api", allWiseUserMealRoute);
 app.use("/api", dayWiseUserMealRoute);
 
 app.use("/api", PackageRoute);
+
+app.use("/api", mealOnOffRoute);
 
 app.use("/api", locationRoute);
 
