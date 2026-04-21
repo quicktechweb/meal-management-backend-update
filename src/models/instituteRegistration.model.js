@@ -19,6 +19,7 @@ const instituteRegistrationSchema = new mongoose.Schema(
     },
     routine_type: String,
     institute_id: String,
+    uid: Number,
     //  Admin Approval System
     approval_status: {
       type: String,

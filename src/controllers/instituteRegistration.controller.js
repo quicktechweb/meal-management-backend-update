@@ -2,7 +2,7 @@ const InstituteRegistration = require("../models/instituteRegistration.model");
 const Role = require("../models/role.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-
+const Counter = require("../models/counter.model");
 const createToken = (id) => {
   return jwt.sign({ id }, process.env.Secret, { expiresIn: "7d" });
 };
@@ -342,19 +342,20 @@ const instituteUserRegistration = async (req, res) => {
       });
     }
 
-    // password hash
+    const uid = await Counter.getNextSequence(
+      `institute_uid_${data.institute_id}`,
+    );
+
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    //  determine added_by
     const addedBy = data.added_by || "self";
-
-    // approval logic
     const approvalStatus = addedBy === "admin" ? "approved" : "pending";
 
     const newUser = await InstituteRegistration.create({
       email: data.email || null,
       phone: data.phone || null,
       role: "user",
+      uid,
       added_by: addedBy,
       approval_status: approvalStatus,
       approved_at: addedBy === "admin" ? new Date() : null,
@@ -395,7 +396,6 @@ const instituteUserRegistration = async (req, res) => {
         addedBy === "admin"
           ? "User created and approved by admin"
           : "Registered successfully, waiting for admin approval",
-
       data: newUser,
     });
   } catch (error) {
