@@ -231,9 +231,10 @@ const allwiseGetUserMeal = async (req, res) => {
 const allwiseGetInsituteUserMeal = async (req, res) => {
   const user = req.user;
 
+  console.log(user);
+
   try {
-    const allWiseMealList = await UserAllWiseMeal.findOne({
-      user_id: user._id,
+    const allWiseMealList = await UserAllWiseMeal.find({
       institute_id: user._id,
     });
 
