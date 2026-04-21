@@ -5,6 +5,7 @@ const userAllWiseMealSchema = new mongoose.Schema(
     type: String,
     user_id: String,
     institute_id: String,
+    uid: Number,
     routine_type: String,
     meals: [
       {

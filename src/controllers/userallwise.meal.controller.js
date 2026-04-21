@@ -10,6 +10,10 @@ const allwiseCreateUserMeal = async (req, res) => {
 
     const institute_id = user?.institute_id;
 
+    const uid = user?.uid;
+
+    console.log(uid);
+
     if (!user_id || !institute_id || !type || !meals?.length) {
       return res.status(400).json({
         success: false,
@@ -18,7 +22,7 @@ const allwiseCreateUserMeal = async (req, res) => {
     }
 
     const updatedMeal = await UserAllWiseMeal.findOneAndUpdate(
-      { user_id, institute_id, type, routine_type },
+      { user_id, institute_id, type, routine_type, uid },
       { $set: { meals } },
       { returnDocument: "after", upsert: true },
     );
