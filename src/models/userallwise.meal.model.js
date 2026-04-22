@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const userAllWiseMealSchema = new mongoose.Schema(
   {
     type: String,
-    user_id: String,
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InstituteRegistration",
+    },
     institute_id: String,
     uid: Number,
     routine_type: String,

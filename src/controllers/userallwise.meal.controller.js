@@ -374,12 +374,10 @@ const allwiseGetAllMealsById = async (req, res) => {
 const allwiseGetInsituteUserMeal = async (req, res) => {
   const user = req.user;
 
-  console.log(user);
-
   try {
     const allWiseMealList = await UserAllWiseMeal.find({
       institute_id: user._id,
-    });
+    }).populate("user_id", "name email phone uid information");
 
     if (!allWiseMealList) {
       return res.status(404).json({
@@ -399,8 +397,6 @@ const allwiseGetInsituteUserMeal = async (req, res) => {
     });
   }
 };
-
-
 
 module.exports = {
   allwiseCreateUserMeal,
