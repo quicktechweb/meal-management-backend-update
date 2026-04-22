@@ -39,6 +39,7 @@ const instituteRegistrationSchema = new mongoose.Schema(
       relation_with_guardian: String,
       guardian_contact_number: String,
       gender: String,
+      room_number: Number,
       religion: String,
       date_of_birth: String,
       occupation: String,
