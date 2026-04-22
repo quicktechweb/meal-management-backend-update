@@ -8,6 +8,9 @@ const {
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
+const {
+  daywiseGetAllMealsById,
+} = require("../controllers/userdaywise.meal.controller");
 
 const router = express.Router();
 
@@ -21,7 +24,7 @@ router.get("/allwise-user-meal-list", instituteRequireAuth, allwiseGetUserMeal);
 
 router.get("/allwise-user-meals", allwiseGetAllMeals);
 
-router.get("/allwise-user-meals/:id", allwiseGetAllMeals);
+router.get("/allwise-user-meals/:id", daywiseGetAllMealsById);
 
 router.get("/fingerprint-attend", allwiseFingerprintAttend);
 

@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const userDayWiseMealSchema = new mongoose.Schema(
   {
     type: String,
-    user_id: String,
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InstituteRegistration",
+    },
     institute_id: String,
     routine_type: String,
     uid: Number,
@@ -15,6 +18,10 @@ const userDayWiseMealSchema = new mongoose.Schema(
         start_time: String,
         end_time: String,
         is_on: Boolean,
+        is_attendance: {
+          type: Boolean,
+          default: false,
+        },
         selected_items: [
           {
             title: String,
