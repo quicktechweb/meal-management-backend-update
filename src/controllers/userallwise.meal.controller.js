@@ -1,7 +1,11 @@
+const axios = require("axios");
+
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
 const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 
 const Institutemealonofftime = require("../models/institutemealonoff.model");
+
+const ATTENDANCE_API = "https://shifting.luckyshop.com.bd/iclock/allattendence";
 
 const formatCutoff = require("../config/formatCutoff");
 
@@ -200,6 +204,96 @@ const allwiseCreateUserMeal = async (req, res) => {
   }
 };
 
+const allwiseFingerprintAttend = async (req, res) => {
+  try {
+    const { data: apiResponse } = await axios.get(ATTENDANCE_API);
+
+    console.log(apiResponse);
+
+    if (!apiResponse.success) {
+      return res
+        .status(400)
+        .json({ success: false, message: "API থেকে data আসেনি" });
+    }
+
+    // আজকের date, day, এবং current time
+    const todayDate = new Date().toISOString().split("T")[0]; // "2026-04-22"
+    const todayDayName = new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+    }); // "Wednesday"
+    const currentTime = new Date().toTimeString().split(" ")[0]; // "10:42:34"
+
+    // আজকের attendance filter
+    const todayAttendances = apiResponse.data.filter((att) => {
+      const date =
+        att.attendance_date ??
+        new Date(att.timestamp).toISOString().split("T")[0];
+      return date === todayDate;
+    });
+
+    const presentUserIds = [
+      ...new Set(todayAttendances.map((att) => att.user_id)),
+    ];
+
+    if (presentUserIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "আজকে কোনো attendance নেই",
+        today: todayDate,
+        currentTime,
+      });
+    }
+
+    // ✅ Present + সময়ের মধ্যে আছে → is_attendance: true
+    const presentResult = await UserAllWiseMeal.updateMany(
+      {
+        uid: { $in: presentUserIds },
+        "meals.day": todayDayName,
+      },
+      { $set: { "meals.$[meal].is_attendance": true } },
+      {
+        arrayFilters: [
+          {
+            "meal.day": todayDayName,
+            "meal.start_time": { $lte: currentTime }, // current time >= start_time
+            "meal.end_time": { $gte: currentTime }, // current time <= end_time
+          },
+        ],
+      },
+    );
+
+    const expiredResult = await UserAllWiseMeal.updateMany(
+      {
+        "meals.day": todayDayName,
+        "meals.is_attendance": true,
+      },
+      { $set: { "meals.$[meal].is_attendance": false } },
+      {
+        arrayFilters: [
+          {
+            "meal.day": todayDayName,
+            "meal.is_attendance": true,
+            "meal.end_time": { $lt: currentTime },
+          },
+        ],
+      },
+    );
+
+    return res.status(200).json({
+      success: true,
+      today: todayDate,
+      dayName: todayDayName,
+      currentTime,
+      presentUsers: presentUserIds,
+      markedPresent: presentResult.modifiedCount,
+      markedExpired: expiredResult.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Attendance sync error:", error.message);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 const allwiseGetUserMeal = async (req, res) => {
   const user = req.user;
 
@@ -207,6 +301,55 @@ const allwiseGetUserMeal = async (req, res) => {
     const allWiseMealList = await UserAllWiseMeal.findOne({
       user_id: user._id,
       institute_id: user.institute_id,
+    });
+
+    if (!allWiseMealList) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const allwiseGetAllMeals = async (req, res) => {
+  try {
+    const allWiseMealList = await UserAllWiseMeal.find();
+
+    if (!allWiseMealList) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const allwiseGetAllMealsById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const allWiseMealList = await UserAllWiseMeal.findOne({
+      uid: id,
     });
 
     if (!allWiseMealList) {
@@ -257,8 +400,13 @@ const allwiseGetInsituteUserMeal = async (req, res) => {
   }
 };
 
+
+
 module.exports = {
   allwiseCreateUserMeal,
   allwiseGetUserMeal,
   allwiseGetInsituteUserMeal,
+  allwiseFingerprintAttend,
+  allwiseGetAllMeals,
+  allwiseGetAllMealsById,
 };
