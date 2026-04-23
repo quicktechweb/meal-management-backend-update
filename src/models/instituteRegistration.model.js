@@ -20,6 +20,11 @@ const instituteRegistrationSchema = new mongoose.Schema(
     routine_type: String,
     institute_id: String,
     uid: Number,
+    balance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     //  Admin Approval System
     approval_status: {
       type: String,

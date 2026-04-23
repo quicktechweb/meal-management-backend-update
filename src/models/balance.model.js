@@ -18,6 +18,7 @@ const balanceSchema = mongoose.Schema(
       required: true,
       min: [1, "Amount must be at least 1"],
     },
+   
     note: {
       type: String,
       trim: true,
