@@ -48,6 +48,10 @@ const PERMISSIONS = [
     module: "Services",
   },
 
+  { name: "Balance", slug: "balance.view", module: "Balance" },
+  { name: "Add Balance", slug: "balance.edit", module: "Balance" },
+  { name: "View Balance", slug: "balance.view", module: "Balance" },
+
   {
     name: "Edit Services",
     slug: "services.edit",

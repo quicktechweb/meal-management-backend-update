@@ -49,7 +49,9 @@ const allWiseUserMealRoutineRoute = require("./routers/userallwiseroutine.meal.r
 
 const dayWiseUserMealRoute = require("./routers/userdaywise.meal.router");
 
-const dayWiseUserMealRoutineRoute = require("./routers/userdaywiseroutine.meal.router")
+const dayWiseUserMealRoutineRoute = require("./routers/userdaywiseroutine.meal.router");
+
+const balanceRoute = require("./routers/balance.router");
 
 const HomeReviewRoute = require("./routers/home.review.router");
 
@@ -121,7 +123,9 @@ app.use("/api", allWiseUserMealRoutineRoute);
 
 app.use("/api", dayWiseUserMealRoute);
 
-app.use("/api",dayWiseUserMealRoutineRoute)
+app.use("/api", dayWiseUserMealRoutineRoute);
+
+app.use("/api", balanceRoute);
 
 app.use("/api", PackageRoute);
 
