@@ -8,7 +8,7 @@ const checkMealTimeStatus = require("../config/checkMealTimeStatus");
 
 const dayWiseUserCreateUserMeal = async (req, res) => {
   try {
-    const { type, meals } = req.body;
+    const { type, meals, routine_type } = req.body;
 
     const user = req.user;
     const user_id = user?._id;
@@ -24,29 +24,30 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
 
     // Institute meal_on_off_time আনো
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
-    const meal_on_off_time = mealOnOffDoc?.meal_on_off_time;
+    const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
 
     // Existing document আনো
     const existingDoc = await UserDayWiseMeal.findOne({
       user_id,
       institute_id,
       type,
+      routine_type,
       uid,
     });
 
-    // AllWise conflict check
+    // DayWise conflict check
     const incomingDays = meals.map((m) => m.day).filter(Boolean);
 
-    const existingAllWiseMeal = await UserAllWiseMeal.findOne({
+    const existingDayWiseMeal = await UserAllWiseMeal.findOne({
       user_id,
       institute_id,
       "meals.day": { $in: incomingDays },
     });
 
-    if (existingAllWiseMeal) {
+    if (existingDayWiseMeal) {
       const conflictDays = [
         ...new Set(
-          existingAllWiseMeal.meals
+          existingDayWiseMeal.meals
             .filter((m) => incomingDays.includes(m.day))
             .map((m) => m.day),
         ),
@@ -54,7 +55,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
 
       return res.status(409).json({
         success: false,
-        message: `These days already have meals in AllWise: ${conflictDays.join(", ")}`,
+        message: `These days already have meals in DayWise: ${conflictDays.join(", ")}`,
         conflict_days: conflictDays,
       });
     }
@@ -62,6 +63,18 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     // Current time in minutes
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // ✅ আজকের day name বের করো
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const todayDayName = dayNames[now.getDay()];
 
     const validMeals = [];
     const errors = [];
@@ -81,7 +94,10 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         ? is_on !== undefined && is_on !== dbMeal.is_on
         : is_on === true;
 
-      if (isOnChanging) {
+      // ✅ শুধু আজকের দিনের meal এ time check করো
+      const isToday = day === todayDayName;
+
+      if (isOnChanging && isToday) {
         const { zone, startMinutes } = checkMealTimeStatus(
           start_time,
           end_time,
@@ -138,7 +154,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         }
       }
 
-      // ✅ Allow zone
+      // ✅ Allow zone (future day বা time এখনো আছে)
       validMeals.push(incomingMeal);
       mealStatuses.push({
         day,
@@ -153,7 +169,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     }
 
     const updatedMeal = await UserDayWiseMeal.findOneAndUpdate(
-      { user_id, institute_id, type, uid },
+      { user_id, institute_id, type, routine_type, uid },
       { $set: { meals: validMeals } },
       { returnDocument: "after", upsert: true },
     );

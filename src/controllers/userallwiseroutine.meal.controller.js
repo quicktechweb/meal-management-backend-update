@@ -69,6 +69,18 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+    // ✅ আজকের day name বের করো
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const todayDayName = dayNames[now.getDay()];
+
     const validMeals = [];
     const errors = [];
     const mealStatuses = [];
@@ -83,12 +95,14 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
       const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
       const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
 
-      // নতুন meal হলেও / existing meal হলেও time check করো
       const isOnChanging = dbMeal
         ? is_on !== undefined && is_on !== dbMeal.is_on
-        : is_on === true; // নতুন meal এ is_on: true দিলেই check করো
+        : is_on === true;
 
-      if (isOnChanging) {
+      // ✅ শুধু আজকের দিনের meal এ time check করো
+      const isToday = day === todayDayName;
+
+      if (isOnChanging && isToday) {
         const { zone, startMinutes } = checkMealTimeStatus(
           start_time,
           end_time,
@@ -145,7 +159,7 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
         }
       }
 
-      // ✅ Allow zone
+      // ✅ Allow zone (future day বা time এখনো আছে)
       validMeals.push(incomingMeal);
       mealStatuses.push({
         day,
