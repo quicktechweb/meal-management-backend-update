@@ -31,8 +31,6 @@ cron.schedule("* * * * *", async () => {
       },
     });
 
-    console.log(docs);
-
     for (const doc of docs) {
       const mealOnOffDoc = await Institutemealonofftime.findOne({
         institute_id: doc.institute_id,

@@ -1,6 +1,7 @@
 const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
 const Institutemealonofftime = require("../models/institutemealonoff.model");
+const InstituteRegistration = require("../models/instituteRegistration.model");
 
 const formatCutoff = require("../config/formatCutoff");
 
@@ -45,26 +46,55 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     });
 
     if (existingDayWiseMeal) {
-      const conflictDays = [
-        ...new Set(
-          existingDayWiseMeal.meals
-            .filter((m) => incomingDays.includes(m.day))
-            .map((m) => m.day),
-        ),
-      ];
+      const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
+        (m) => incomingDays.includes(m.day) && m.is_on === true,
+      );
 
-      return res.status(409).json({
-        success: false,
-        message: `These days already have meals in DayWise: ${conflictDays.join(", ")}`,
-        conflict_days: conflictDays,
-      });
+      const realConflictDays = [];
+      const timeLockedDays = [];
+
+      for (const dwMeal of conflictingDayWiseMeals) {
+        const isToday = dwMeal.day === todayDayName;
+
+        if (isToday) {
+          const { zone } = checkMealTimeStatus(
+            dwMeal.start_time,
+            dwMeal.end_time,
+            meal_on_off_time,
+            currentMinutes,
+          );
+
+          if (zone === "time_over" || zone === "meal_over") {
+            timeLockedDays.push(dwMeal.day);
+          } else {
+            realConflictDays.push(dwMeal.day);
+          }
+        } else {
+          realConflictDays.push(dwMeal.day);
+        }
+      }
+
+      const uniqueRealConflicts = [...new Set(realConflictDays)];
+      const uniqueTimeLocked = [...new Set(timeLockedDays)];
+
+      if (uniqueRealConflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `These days already have meals in DayWise: ${uniqueRealConflicts.join(", ")}`,
+          conflict_days: uniqueRealConflicts,
+          ...(uniqueTimeLocked.length && {
+            time_locked_days: uniqueTimeLocked,
+            time_locked_note:
+              "These days' on/off time is already over, no conflict applied",
+          }),
+        });
+      }
     }
 
     // Current time in minutes
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // ✅ আজকের day name বের করো
     const dayNames = [
       "Sunday",
       "Monday",
@@ -80,23 +110,35 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     const errors = [];
     const mealStatuses = [];
 
+    // ✅ Balance deduction tracking
+    let totalDeduct = 0;
+    const balanceOps = [];
+
     for (const incomingMeal of meals) {
       const { day, meal_type, is_on } = incomingMeal;
+
+      console.log(incomingMeal, "incoming Meal");
 
       const dbMeal = existingDoc?.meals?.find(
         (m) => m.day === day && m.meal_type === meal_type,
       );
 
+      console.log("dbMeal", dbMeal);
+
       const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
       const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
+      const package_price =
+        dbMeal?.package_price ?? incomingMeal.package_price ?? 0;
+
+      console.log(package_price, "package price");
 
       const isOnChanging = dbMeal
         ? is_on !== undefined && is_on !== dbMeal.is_on
         : is_on === true;
 
-      // ✅ শুধু আজকের দিনের meal এ time check করো
       const isToday = day === todayDayName;
 
+      // ─── Time-zone check (today only) ───────────────────────────────────────
       if (isOnChanging && isToday) {
         const { zone, startMinutes } = checkMealTimeStatus(
           start_time,
@@ -154,8 +196,35 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         }
       }
 
-      // ✅ Allow zone (future day বা time এখনো আছে)
-      validMeals.push(incomingMeal);
+      // ─── Balance logic ───────────────────────────────────────────────────────
+      const wasOn = dbMeal?.is_on ?? false;
+      const wasDeducted = dbMeal?.balance_deducted ?? false;
+
+      let balance_deducted = dbMeal?.balance_deducted ?? false;
+
+      if (is_on === true && !wasOn && !wasDeducted) {
+        // Turning ON → deduct
+        totalDeduct += package_price;
+        balance_deducted = true;
+        balanceOps.push({
+          day,
+          meal_type,
+          op: "deduct",
+          amount: package_price,
+        });
+      } else if (is_on === false && wasOn && wasDeducted) {
+        // Turning OFF → refund
+        totalDeduct -= package_price;
+        balance_deducted = false;
+        balanceOps.push({
+          day,
+          meal_type,
+          op: "refund",
+          amount: package_price,
+        });
+      }
+
+      validMeals.push({ ...incomingMeal, balance_deducted });
       mealStatuses.push({
         day,
         meal_type,
@@ -168,13 +237,42 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       });
     }
 
+    // ─── Insufficient balance check ──────────────────────────────────────────
+    if (totalDeduct > 0) {
+      const userDoc =
+        await InstituteRegistration.findById(user_id).select("balance");
+      if (!userDoc) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+      }
+      if (userDoc.balance < totalDeduct) {
+        return res.status(402).json({
+          success: false,
+          message: `Insufficient balance. Required: ${totalDeduct}, Available: ${userDoc.balance}`,
+          required: totalDeduct,
+          available: userDoc.balance,
+        });
+      }
+    }
+
+    // ─── Atomic balance update ───────────────────────────────────────────────
+    if (totalDeduct !== 0) {
+      await InstituteRegistration.findByIdAndUpdate(
+        user_id,
+        { $inc: { balance: -totalDeduct } }, // negative totalDeduct = refund
+        { new: true },
+      );
+    }
+
+    // ─── Save meals ──────────────────────────────────────────────────────────
     const updatedMeal = await UserDayWiseMeal.findOneAndUpdate(
       { user_id, institute_id, type, routine_type, uid },
       { $set: { meals: validMeals } },
       { returnDocument: "after", upsert: true },
     );
 
-    // meals এর সাথে status merge করো
+    // Merge status into response meals
     const mealsWithStatus = updatedMeal.meals.map((meal) => {
       const statusInfo = mealStatuses.find(
         (s) => s.day === meal.day && s.meal_type === meal.meal_type,
@@ -187,11 +285,9 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       };
     });
 
-    // response message তৈরি করো
     const timeOverMeals = errors
       .map((e) => `${e.meal_type} (${e.start_time})`)
       .join(", ");
-
     const responseMessage = errors.length
       ? `${timeOverMeals} on/off time is over`
       : "Meals updated successfully";
@@ -203,13 +299,14 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         ...updatedMeal.toObject(),
         meals: mealsWithStatus,
       },
+      ...(balanceOps.length && {
+        balance_ops: balanceOps,
+        net_balance_change: -totalDeduct,
+      }),
       ...(errors.length && { errors }),
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message,
-    });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 

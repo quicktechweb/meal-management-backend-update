@@ -56,35 +56,9 @@ const allwiseCreateUserMeal = async (req, res) => {
       uid,
     });
 
-    // ── DayWise conflict check ──
-    const incomingDays = meals.map((m) => m.day).filter(Boolean);
-
-    const existingDayWiseMeal = await UserDayWiseMeal.findOne({
-      user_id,
-      institute_id,
-      "meals.day": { $in: incomingDays },
-    });
-
-    if (existingDayWiseMeal) {
-      const conflictDays = [
-        ...new Set(
-          existingDayWiseMeal.meals
-            .filter((m) => incomingDays.includes(m.day))
-            .map((m) => m.day),
-        ),
-      ];
-
-      return res.status(409).json({
-        success: false,
-        message: `These days already have meals in DayWise: ${conflictDays.join(", ")}`,
-        conflict_days: conflictDays,
-      });
-    }
-
     // ── Current time ──
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
     const dayNames = [
       "Sunday",
       "Monday",
@@ -95,6 +69,66 @@ const allwiseCreateUserMeal = async (req, res) => {
       "Saturday",
     ];
     const todayDayName = dayNames[now.getDay()];
+
+    // ── DayWise conflict check ──
+    const incomingDays = meals.map((m) => m.day).filter(Boolean);
+
+    const existingDayWiseMeal = await UserDayWiseMeal.findOne({
+      user_id,
+      institute_id,
+      "meals.day": { $in: incomingDays },
+    });
+
+    if (existingDayWiseMeal) {
+      // ✅ is_on: true হলেই conflict candidate
+      const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
+        (m) => incomingDays.includes(m.day) && m.is_on === true,
+      );
+
+      const realConflictDays = [];
+      const timeLockedDays = [];
+
+      for (const dwMeal of conflictingDayWiseMeals) {
+        const isToday = dwMeal.day === todayDayName;
+
+        if (isToday) {
+          // ✅ আজকের জন্য on/off time check
+          const { zone } = checkMealTimeStatus(
+            dwMeal.start_time,
+            dwMeal.end_time,
+            meal_on_off_time,
+            currentMinutes,
+          );
+
+          if (zone === "time_over" || zone === "meal_over") {
+            // on/off time পার হয়ে গেছে → real conflict না
+            timeLockedDays.push(dwMeal.day);
+          } else {
+           
+            realConflictDays.push(dwMeal.day);
+          }
+        } else {
+       
+          realConflictDays.push(dwMeal.day);
+        }
+      }
+
+      const uniqueRealConflicts = [...new Set(realConflictDays)];
+      const uniqueTimeLocked = [...new Set(timeLockedDays)];
+
+      if (uniqueRealConflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `These days already have meals in DayWise: ${uniqueRealConflicts.join(", ")}`,
+          conflict_days: uniqueRealConflicts,
+          ...(uniqueTimeLocked.length && {
+            time_locked_days: uniqueTimeLocked,
+            time_locked_note:
+              "These days' on/off time is already over, no conflict applied",
+          }),
+        });
+      }
+    }
 
     const validMeals = [];
     const errors = [];
@@ -175,7 +209,7 @@ const allwiseCreateUserMeal = async (req, res) => {
         }
       }
 
-      // ── Valid meal — balance_deducted false  ──
+      // ── Valid meal ──
       validMeals.push({
         ...incomingMeal,
         balance_deducted: false,
@@ -198,7 +232,7 @@ const allwiseCreateUserMeal = async (req, res) => {
       { returnDocument: "after", upsert: true },
     );
 
-    // ── meals  status merge ──
+    // ── meals status merge ──
     const mealsWithStatus = updatedMeal.meals.map((meal) => {
       const statusInfo = mealStatuses.find(
         (s) => s.day === meal.day && s.meal_type === meal.meal_type,

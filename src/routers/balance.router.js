@@ -112,7 +112,6 @@ router.post("/add-balance", instituteRequireAuth, async (req, res) => {
         .json({ success: false, message: "Amount must be a positive number" });
     }
 
-    console.log(parsedAmount);
 
     const targetUser = await InstituteRegistration.findOne({
       _id: user,
