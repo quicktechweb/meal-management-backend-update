@@ -23,6 +23,18 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       });
     }
 
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const now = new Date();
+    const todayDayName = dayNames[now.getDay()];
+
     // Institute meal_on_off_time আনো
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
     const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
@@ -92,19 +104,8 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     }
 
     // Current time in minutes
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    const dayNames = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    const todayDayName = dayNames[now.getDay()];
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const validMeals = [];
     const errors = [];
