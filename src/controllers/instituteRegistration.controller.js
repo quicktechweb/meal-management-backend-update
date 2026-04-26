@@ -388,6 +388,10 @@ const instituteUserRegistration = async (req, res) => {
         password: hashedPassword,
         documents: data.documents,
         room_number: data.room_number,
+        experience: data.experience,
+        salary: data.salary,
+        reference: data.reference,
+        marital_status: data.marital_status,
       },
     });
 

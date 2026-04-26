@@ -53,7 +53,10 @@ const instituteRegistrationSchema = new mongoose.Schema(
       year: String,
       name_of_the_mess: String,
       name_of_the_hall: String,
-
+      marital_status: String,
+      salary: String,
+      experience: String,
+      reference: String,
       instituteType: String,
       name_of_institute: String,
       number_of_member: Number,
