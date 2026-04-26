@@ -27,11 +27,27 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
       });
     }
 
-    // Institute meal_on_off_time আনো
+    const totalCost = meals
+      .filter((m) => m.is_on === true)
+      .reduce((sum, m) => sum + (Number(m.package_price) || 0), 0);
+
+    if (totalCost > 0) {
+      const currentUser =
+        await InstituteRegistration.findById(user_id).select("balance");
+
+      if (!currentUser || (currentUser.balance ?? 0) < totalCost) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient balance. Required: ${totalCost}, Available: ${currentUser?.balance ?? 0}`,
+        });
+      }
+    }
+
+    // Institute meal_on_off_time
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
     const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
 
-    // Existing document আনো
+    // Existing document
     const existingDoc = await UserAllWiseRoutineMeal.findOne({
       user_id,
       institute_id,
@@ -69,7 +85,7 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // ✅ আজকের day name বের করো
+    // আজকের day name বের করো
     const dayNames = [
       "Sunday",
       "Monday",
@@ -99,7 +115,7 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
         ? is_on !== undefined && is_on !== dbMeal.is_on
         : is_on === true;
 
-      // ✅ শুধু আজকের দিনের meal এ time check করো
+      // শুধু আজকের দিনের meal এ time check করো
       const isToday = day === todayDayName;
 
       if (isOnChanging && isToday) {
@@ -127,10 +143,6 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
             status: "meal_over",
             message: `${meal_type} already over (ended at ${end_time})`,
           });
-          validMeals.push({
-            ...incomingMeal,
-            is_on: dbMeal ? dbMeal.is_on : false,
-          });
           continue;
         }
 
@@ -151,15 +163,11 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
             status: "time_over",
             message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
           });
-          validMeals.push({
-            ...incomingMeal,
-            is_on: dbMeal ? dbMeal.is_on : false,
-          });
           continue;
         }
       }
 
-      // ✅ Allow zone (future day বা time এখনো আছে)
+      // Allow zone (future day বা time এখনো আছে)
       validMeals.push(incomingMeal);
       mealStatuses.push({
         day,
@@ -173,6 +181,16 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
       });
     }
 
+    // ✅ কোনো error থাকলে DB update করা হবে না
+    if (errors.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: errors.map((e) => e.message).join(", "),
+        errors,
+      });
+    }
+
+    // ✅ শুধু সব meal valid হলে DB update হবে
     const updatedMeal = await UserAllWiseRoutineMeal.findOneAndUpdate(
       { user_id, institute_id, type, routine_type, uid },
       { $set: { meals: validMeals } },
@@ -192,23 +210,13 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
       };
     });
 
-    // response message তৈরি করো
-    const timeOverMeals = errors
-      .map((e) => `${e.meal_type} (${e.start_time})`)
-      .join(", ");
-
-    const responseMessage = errors.length
-      ? `${timeOverMeals} on/off time is over`
-      : "Meals updated successfully";
-
     return res.status(200).json({
       success: true,
-      message: responseMessage,
+      message: "Meals updated successfully",
       data: {
         ...updatedMeal.toObject(),
         meals: mealsWithStatus,
       },
-      ...(errors.length && { errors }),
     });
   } catch (err) {
     res.status(500).json({

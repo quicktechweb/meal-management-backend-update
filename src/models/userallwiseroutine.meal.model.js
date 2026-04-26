@@ -18,6 +18,11 @@ const userAllWiseRoutineMealSchema = new mongoose.Schema(
         start_time: String,
         end_time: String,
         is_on: Boolean,
+        total_price: Number,
+        balance_deducted: {
+          type: Boolean,
+          default: false,
+        },
         is_attendance: {
           type: Boolean,
           default: false,

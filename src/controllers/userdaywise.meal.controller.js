@@ -35,6 +35,9 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     const now = new Date();
     const todayDayName = dayNames[now.getDay()];
 
+    // ✅ উপরে নিয়ে আসো — conflict check এ দরকার
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
     // Institute meal_on_off_time আনো
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
     const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
@@ -48,24 +51,24 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       uid,
     });
 
-    // DayWise conflict check
+    // AllWise conflict check
     const incomingDays = meals.map((m) => m.day).filter(Boolean);
 
-    const existingDayWiseMeal = await UserAllWiseMeal.findOne({
+    const existingAllWiseMeal = await UserAllWiseMeal.findOne({
       user_id,
       institute_id,
       "meals.day": { $in: incomingDays },
     });
 
-    if (existingDayWiseMeal) {
-      const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
+    if (existingAllWiseMeal) {
+      const conflictingMeals = existingAllWiseMeal.meals.filter(
         (m) => incomingDays.includes(m.day) && m.is_on === true,
       );
 
       const realConflictDays = [];
       const timeLockedDays = [];
 
-      for (const dwMeal of conflictingDayWiseMeals) {
+      for (const dwMeal of conflictingMeals) {
         const isToday = dwMeal.day === todayDayName;
 
         if (isToday) {
@@ -92,7 +95,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       if (uniqueRealConflicts.length > 0) {
         return res.status(409).json({
           success: false,
-          message: `These days already have meals in DayWise: ${uniqueRealConflicts.join(", ")}`,
+          message: `These days already have meals in AllWise: ${uniqueRealConflicts.join(", ")}`,
           conflict_days: uniqueRealConflicts,
           ...(uniqueTimeLocked.length && {
             time_locked_days: uniqueTimeLocked,
@@ -103,35 +106,24 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       }
     }
 
-    // Current time in minutes
-
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
     const validMeals = [];
     const errors = [];
     const mealStatuses = [];
 
-    // ✅ Balance deduction tracking
     let totalDeduct = 0;
     const balanceOps = [];
 
     for (const incomingMeal of meals) {
       const { day, meal_type, is_on } = incomingMeal;
 
-      console.log(incomingMeal, "incoming Meal");
-
       const dbMeal = existingDoc?.meals?.find(
         (m) => m.day === day && m.meal_type === meal_type,
       );
-
-      console.log("dbMeal", dbMeal);
 
       const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
       const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
       const package_price =
         dbMeal?.package_price ?? incomingMeal.package_price ?? 0;
-
-      console.log(package_price, "package price");
 
       const isOnChanging = dbMeal
         ? is_on !== undefined && is_on !== dbMeal.is_on
@@ -165,11 +157,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
             status: "meal_over",
             message: `${meal_type} already over (ended at ${end_time})`,
           });
-          validMeals.push({
-            ...incomingMeal,
-            is_on: dbMeal ? dbMeal.is_on : false,
-          });
-          continue;
+          continue; // ✅ validMeals এ push নেই
         }
 
         if (zone === "time_over") {
@@ -189,22 +177,16 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
             status: "time_over",
             message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
           });
-          validMeals.push({
-            ...incomingMeal,
-            is_on: dbMeal ? dbMeal.is_on : false,
-          });
-          continue;
+          continue; // ✅ validMeals এ push নেই
         }
       }
 
       // ─── Balance logic ───────────────────────────────────────────────────────
       const wasOn = dbMeal?.is_on ?? false;
       const wasDeducted = dbMeal?.balance_deducted ?? false;
-
       let balance_deducted = dbMeal?.balance_deducted ?? false;
 
       if (is_on === true && !wasOn && !wasDeducted) {
-        // Turning ON → deduct
         totalDeduct += package_price;
         balance_deducted = true;
         balanceOps.push({
@@ -214,7 +196,6 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
           amount: package_price,
         });
       } else if (is_on === false && wasOn && wasDeducted) {
-        // Turning OFF → refund
         totalDeduct -= package_price;
         balance_deducted = false;
         balanceOps.push({
@@ -235,6 +216,15 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         message: dbMeal
           ? `${meal_type} updated successfully`
           : `${meal_type} added successfully`,
+      });
+    }
+
+    // ✅ কোনো error থাকলে DB update করা হবে না
+    if (errors.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: errors.map((e) => e.message).join(", "),
+        errors,
       });
     }
 
@@ -261,7 +251,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     if (totalDeduct !== 0) {
       await InstituteRegistration.findByIdAndUpdate(
         user_id,
-        { $inc: { balance: -totalDeduct } }, // negative totalDeduct = refund
+        { $inc: { balance: -totalDeduct } },
         { new: true },
       );
     }
@@ -273,7 +263,6 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       { returnDocument: "after", upsert: true },
     );
 
-    // Merge status into response meals
     const mealsWithStatus = updatedMeal.meals.map((meal) => {
       const statusInfo = mealStatuses.find(
         (s) => s.day === meal.day && s.meal_type === meal.meal_type,
@@ -286,16 +275,9 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       };
     });
 
-    const timeOverMeals = errors
-      .map((e) => `${e.meal_type} (${e.start_time})`)
-      .join(", ");
-    const responseMessage = errors.length
-      ? `${timeOverMeals} on/off time is over`
-      : "Meals updated successfully";
-
     return res.status(200).json({
       success: true,
-      message: responseMessage,
+      message: "Meals updated successfully",
       data: {
         ...updatedMeal.toObject(),
         meals: mealsWithStatus,
@@ -304,7 +286,6 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         balance_ops: balanceOps,
         net_balance_change: -totalDeduct,
       }),
-      ...(errors.length && { errors }),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
