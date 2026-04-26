@@ -1,5 +1,6 @@
 require("@dotenvx/dotenvx").config();
 require("./corn/balanceduduct.corn");
+require("./corn/Routinemeal.cron");
 const cors = require("cors");
 const dns = require("dns").promises;
 dns.setServers(["8.8.8.8", "1.1.1.1"]);

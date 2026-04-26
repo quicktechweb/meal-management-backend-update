@@ -80,7 +80,7 @@ cron.schedule("* * * * *", async () => {
           }
 
           // balance_deducted true করো
-          await UserAllWiseRoutineMeal.updateOne(
+          await UserDayWiseRoutineMeal.updateOne(
             { _id: doc._id, "meals._id": meal._id },
             { $set: { "meals.$.balance_deducted": true } },
           );

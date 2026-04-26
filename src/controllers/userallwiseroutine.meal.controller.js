@@ -5,6 +5,8 @@ const UserDayWiseRoutineMeal = require("../models/userdaywiseroutine.meal.model"
 
 const Institutemealonofftime = require("../models/institutemealonoff.model");
 
+const InstituteRegistration = require("../models/instituteRegistration.model");
+
 const ATTENDANCE_API = "https://shifting.luckyshop.com.bd/iclock/allattendence";
 
 const formatCutoff = require("../config/formatCutoff");
@@ -14,6 +16,10 @@ const checkMealTimeStatus = require("../config/checkMealTimeStatus");
 const allwiseRoutineCreateUserMeal = async (req, res) => {
   try {
     const { type, meals, routine_type } = req.body;
+
+    console.log(type, "type");
+    console.log(meals, "meals");
+    console.log(routine_type, "routine_type");
 
     const user = req.user;
     const user_id = user?._id;
@@ -29,7 +35,7 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
 
     const totalCost = meals
       .filter((m) => m.is_on === true)
-      .reduce((sum, m) => sum + (Number(m.package_price) || 0), 0);
+      .reduce((sum, m) => sum + (Number(m.total_price) || 0), 0);
 
     if (totalCost > 0) {
       const currentUser =
@@ -42,6 +48,8 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
         });
       }
     }
+
+    console.log(totalCost);
 
     // Institute meal_on_off_time
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
@@ -143,6 +151,11 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
             status: "meal_over",
             message: `${meal_type} already over (ended at ${end_time})`,
           });
+          validMeals.push({
+            ...incomingMeal,
+            is_on: dbMeal ? dbMeal.is_on : false,
+            balance_deducted: dbMeal?.balance_deducted ?? false,
+          });
           continue;
         }
 
@@ -163,12 +176,21 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
             status: "time_over",
             message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
           });
+
+          validMeals.push({
+            ...incomingMeal,
+            is_on: dbMeal ? dbMeal.is_on : false,
+            balance_deducted: dbMeal?.balance_deducted ?? false,
+          });
           continue;
         }
       }
 
       // Allow zone (future day বা time এখনো আছে)
-      validMeals.push(incomingMeal);
+      validMeals.push({
+        ...incomingMeal,
+        balance_deducted: false,
+      });
       mealStatuses.push({
         day,
         meal_type,

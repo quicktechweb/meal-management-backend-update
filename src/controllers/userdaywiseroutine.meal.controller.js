@@ -22,6 +22,22 @@ const dayWiseUserRoutineCreateUserMeal = async (req, res) => {
       });
     }
 
+    const totalCost = meals
+      .filter((m) => m.is_on === true)
+      .reduce((sum, m) => sum + (Number(m.total_price) || 0), 0);
+
+    if (totalCost > 0) {
+      const currentUser =
+        await InstituteRegistration.findById(user_id).select("balance");
+
+      if (!currentUser || (currentUser.balance ?? 0) < totalCost) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient balance. Required: ${totalCost}, Available: ${currentUser?.balance ?? 0}`,
+        });
+      }
+    }
+
     // Institute meal_on_off_time আনো
     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
     const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
@@ -104,6 +120,8 @@ const dayWiseUserRoutineCreateUserMeal = async (req, res) => {
           meal_on_off_time,
           currentMinutes,
         );
+
+        console.log(zone, "zone");
 
         if (zone === "meal_over") {
           errors.push({
