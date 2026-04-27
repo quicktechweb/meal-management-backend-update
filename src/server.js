@@ -65,6 +65,9 @@ const rolesRoute = require("./routers/role.router");
 const mealOnOffRoute = require("./routers/institutemealonoff.router");
 
 const permissionsRoute = require("./routers/permission.router");
+
+const inventoryProductRoute = require("./routers/inventoryProduct.router");
+
 const connectDB = require("./connectdb");
 
 const app = express();
@@ -137,6 +140,8 @@ app.use("/api", locationRoute);
 app.use("/api", rolesRoute);
 
 app.use("/api", permissionsRoute);
+
+app.use("/api", inventoryProductRoute);
 
 // firebase auth
 app.use("/api/firebaseAuth", firebaseauthRoute);
