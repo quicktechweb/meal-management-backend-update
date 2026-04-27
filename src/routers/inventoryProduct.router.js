@@ -35,6 +35,8 @@ router.post(
       const data = req.body;
       const files = req.files || {};
 
+      console.log(files);
+
       if (!data) {
         return res
           .status(400)
