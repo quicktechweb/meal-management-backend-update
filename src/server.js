@@ -72,6 +72,8 @@ const sellerRoute = require("./routers/seller.router");
 
 const buyerRoute = require("./routers/buyer.router");
 
+const InventoryPurchaseProductRoute = require("./routers/inventory.purchaseproduct.router");
+
 const connectDB = require("./connectdb");
 
 const app = express();
@@ -150,6 +152,8 @@ app.use("/api", inventoryProductRoute);
 app.use("/api", sellerRoute);
 
 app.use("/api", buyerRoute);
+
+app.use("/api", InventoryPurchaseProductRoute);
 
 // firebase auth
 app.use("/api/firebaseAuth", firebaseauthRoute);
