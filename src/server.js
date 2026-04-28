@@ -68,6 +68,8 @@ const permissionsRoute = require("./routers/permission.router");
 
 const inventoryProductRoute = require("./routers/inventoryProduct.router");
 
+const sellerRoute = require("./routers/seller.router");
+
 const connectDB = require("./connectdb");
 
 const app = express();
@@ -142,6 +144,8 @@ app.use("/api", rolesRoute);
 app.use("/api", permissionsRoute);
 
 app.use("/api", inventoryProductRoute);
+
+app.use("/api", sellerRoute);
 
 // firebase auth
 app.use("/api/firebaseAuth", firebaseauthRoute);
