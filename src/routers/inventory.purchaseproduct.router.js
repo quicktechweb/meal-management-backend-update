@@ -1,6 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const InventoryPurchaseProduct = require("./models/InventoryPurchaseProduct"); // path adjust koro
+const InventoryPurchaseProduct = require("../models/inventory.purchaseproduct.model");
 
 const router = express.Router();
 

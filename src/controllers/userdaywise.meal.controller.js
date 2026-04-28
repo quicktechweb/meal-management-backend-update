@@ -2,6 +2,7 @@ const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
 const Institutemealonofftime = require("../models/institutemealonoff.model");
 const InstituteRegistration = require("../models/instituteRegistration.model");
+const UserDayWiseOrder = require("../models/UserDayWiseOrder.model");
 
 const formatCutoff = require("../config/formatCutoff");
 
@@ -58,8 +59,6 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       institute_id,
       "meals.day": { $in: incomingDays },
     });
-
-    
 
     if (existingAllWiseMeal) {
       const conflictingMeals = existingAllWiseMeal.meals.filter(
@@ -158,7 +157,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
             status: "meal_over",
             message: `${meal_type} already over (ended at ${end_time})`,
           });
-          continue; // ✅ validMeals এ push নেই
+          continue;
         }
 
         if (zone === "time_over") {
@@ -178,7 +177,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
             status: "time_over",
             message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
           });
-          continue; // ✅ validMeals এ push নেই
+          continue;
         }
       }
 

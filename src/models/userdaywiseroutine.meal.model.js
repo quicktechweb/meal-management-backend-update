@@ -7,7 +7,10 @@ const userDayWiseRoutineMealSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "InstituteRegistration",
     },
-    institute_id: String,
+    institute_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "InstituteRegistration",
+    },
     routine_type: String,
     uid: Number,
     meals: [

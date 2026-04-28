@@ -34,13 +34,16 @@ router.patch("/daywise-user-meal-update/:id", async (req, res) => {
 
 router.get("/global-day-wise-user-meal", async (req, res) => {
   const [dayWiseMealList, dayWiseMealRoutineList] = await Promise.all([
-    UserDayWiseMeal.find().lean(),
-    UserDayWiseRoutineMeal.find().lean(),
+    UserDayWiseMeal.find()
+      .populate("institute_id", "information.name_of_institute")
+      .lean(),
+    UserDayWiseRoutineMeal.find()
+      .populate("institute_id", "information.name_of_institute")
+      .lean(),
   ]);
 
   const combined = [...dayWiseMealList, ...dayWiseMealRoutineList];
 
   res.json(combined);
 });
-
 module.exports = router;
