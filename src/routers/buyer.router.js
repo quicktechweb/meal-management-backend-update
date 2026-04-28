@@ -56,7 +56,7 @@ router.post("/buyer", async (req, res) => {
 });
 
 router.patch(
-  "/Buyer/:id",
+  "/buyer/:id",
 
   async (req, res) => {
     try {
@@ -92,7 +92,7 @@ router.patch(
 );
 
 // DELETE
-router.delete("/Buyer/:id", async (req, res) => {
+router.delete("/buyer/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
