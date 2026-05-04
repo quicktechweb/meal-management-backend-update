@@ -8,6 +8,7 @@ const {
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
+const UserAllWiseRoutineMeal = require("../models/userallwiseroutine.meal.model");
 const {
   daywiseGetAllMealsById,
 } = require("../controllers/userdaywise.meal.controller");
@@ -43,6 +44,21 @@ router.patch("/allwise-user-meal-update/:id", async (req, res) => {
   );
 
   res.send({ success: true });
+});
+
+router.get("/global-all-wise-user-meal", async (req, res) => {
+  const [dayWiseMealList, dayWiseMealRoutineList] = await Promise.all([
+    UserAllWiseMeal.find()
+      .populate("institute_id", "information.name_of_institute")
+      .lean(),
+    UserAllWiseRoutineMeal.find()
+      .populate("institute_id", "information.name_of_institute")
+      .lean(),
+  ]);
+
+  const combined = [...dayWiseMealList, ...dayWiseMealRoutineList];
+
+  res.json(combined);
 });
 
 // cron.schedule("* * * * *", async () => {
