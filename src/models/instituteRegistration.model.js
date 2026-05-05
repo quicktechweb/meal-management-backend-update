@@ -80,13 +80,55 @@ const instituteRegistrationSchema = new mongoose.Schema(
     },
 
     services: {
-      user_type: String,
+      user_type: {
+        id: { type: mongoose.Schema.Types.ObjectId, ref: "ServiceType" },
+        title: String, // "user" or "client"
+      },
 
-      kitchen_type: String,
-      utility_service: [{ name: String }],
-      service_feature: [{ name: String }],
-      service: String,
-      total_amount: Number,
+      kitchen_type: {
+        id: { type: mongoose.Schema.Types.ObjectId, ref: "Kitchen" },
+        title: String,
+      },
+
+      utility_bills: [
+        {
+          utility_id: { type: mongoose.Schema.Types.ObjectId, ref: "Utility" },
+          name: String,
+          bear_the_cost: {
+            id: mongoose.Schema.Types.ObjectId,
+            title: String,
+          },
+        },
+      ],
+
+      service_features: [
+        {
+          feature_id: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "ServiceFeature",
+          },
+          name: String,
+        },
+      ],
+
+      charges: [
+        {
+          charge_id: { type: mongoose.Schema.Types.ObjectId, ref: "Charge" },
+          name: String,
+          type: { type: String, enum: ["Per User", "Per Meal"] },
+          charge_generate: String,
+          price: Number,
+          ranges: [
+            {
+              min: Number,
+              max: Number,
+              price: Number,
+            },
+          ],
+        },
+      ],
+
+      total_amount: { type: Number, default: 0 },
     },
 
     routine: {

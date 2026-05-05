@@ -10,21 +10,25 @@ const createToken = (id) => {
 const instituteRegistration = async (req, res) => {
   try {
     const data = req.body;
-    // update step 2 ,step 3 ,step 4
-    if (data.userId) {
-      const updateData = {
-        information: data.information,
-        services: data.services,
-        routine: data.routine,
-        packages: data.packages,
-        admin_info: data.admin_info,
-        registration_step: data.registration_step,
-      };
 
+    // ── Update: step 2, 3, 4 ──────────────────────────────
+    if (data.userId) {
+      const updateData = {};
+
+      // প্রতিটা field conditionally set করো
+      if (data.information) updateData.information = data.information;
+      if (data.routine) updateData.routine = data.routine;
+      if (data.packages) updateData.packages = data.packages;
+      if (data.admin_info) updateData.admin_info = data.admin_info;
+
+      updateData.registration_step = data.registration_step;
+
+      // ── Step 1 ──
       if (data.registration_step === 1) {
         if (data.email) updateData.email = data.email;
         if (data.phone) updateData.phone = data.phone;
         if (data.role) updateData.role = data.role;
+
         if (data?.information?.password) {
           const salt = await bcrypt.genSalt(10);
           updateData.information = {
@@ -34,7 +38,24 @@ const instituteRegistration = async (req, res) => {
         }
       }
 
-      // approval on the step 4
+      // ── Step 2 (services) ──
+      if (data.registration_step === 2) {
+        updateData.services = {
+          user_type: data.services?.user_type,
+          kitchen_type: data.services?.kitchen_type,
+          utility_bills: data.services?.utility_bills || [],
+          service_features: data.services?.service_features || [],
+          charges: data.services?.charges || [],
+          total_amount: data.services?.total_amount || 0,
+        };
+      }
+
+      // ── Step 3 ──
+      if (data.registration_step === 3) {
+        updateData.routine_type = data?.routine_type;
+      }
+
+      // ── Step 4 ──
       if (data.registration_step === 4) {
         updateData.approval_status = "pending";
 
@@ -44,17 +65,10 @@ const instituteRegistration = async (req, res) => {
               Role.create({ name: roleName, institute_id: data.userId }),
             ),
           );
-
-          const roleIds = createdRoles.map((role) => role._id);
-
-          updateData.roles = roleIds;
+          updateData.roles = createdRoles.map((role) => role._id);
         } catch (roleError) {
           console.error("Error creating roles:", roleError);
         }
-      }
-
-      if (data.registration_step === 3) {
-        updateData.routine_type = data?.routine_type;
       }
 
       const updatedUser = await InstituteRegistration.findByIdAndUpdate(
@@ -77,7 +91,7 @@ const instituteRegistration = async (req, res) => {
       });
     }
 
-    // new registration step 1
+    // ── New Registration: step 1 ──────────────────────────
     if (!data.email && !data.phone) {
       return res.status(400).json({
         success: false,
@@ -92,7 +106,7 @@ const instituteRegistration = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(data?.information?.password, salt);
 
-    const user = await InstituteRegistration.findOneAndUpdate(
+    const newUser = await InstituteRegistration.findOneAndUpdate(
       {
         $or: query,
         approval_status: { $ne: "pending" },
@@ -107,19 +121,16 @@ const instituteRegistration = async (req, res) => {
             ...data.information,
             password: hashedPassword,
           },
-          services: data.services || {},
-          routine: data.routine || {},
-          admin_info: data.admin_info || {},
+          services: {},
+          routine: {},
+          admin_info: {},
           registration_step: 1,
         },
       },
-      {
-        new: true,
-        upsert: true,
-      },
+      { new: true, upsert: true },
     );
 
-    if (!user) {
+    if (!newUser) {
       return res.status(400).json({
         success: false,
         message: "This email and phone number already have an account.",
@@ -129,7 +140,7 @@ const instituteRegistration = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Step 1 added Successfully",
-      userId: user._id,
+      userId: newUser._id,
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -139,8 +150,6 @@ const instituteRegistration = async (req, res) => {
         message: `This ${field} have already Registered`,
       });
     }
-
-    console.log(updatedUser);
 
     return res.status(500).json({
       success: false,
