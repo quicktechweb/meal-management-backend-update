@@ -93,6 +93,8 @@ const createRole = async (req, res) => {
 const getRoles = async (req, res) => {
   const user = req.user;
 
+
+
   if (!user) {
     return res.status(401).json({ error: "Unauthorized: User not found" });
   }
@@ -101,6 +103,7 @@ const getRoles = async (req, res) => {
     const roles = await Role.find({ institute_id: user._id }).populate(
       "permissions",
     );
+    const filteredRoles = roles.filter((role) => role.name !== user?.role);
 
     if (!roles || roles.length === 0) {
       return res
@@ -111,7 +114,7 @@ const getRoles = async (req, res) => {
     res.status(200).json({
       success: true,
       count: roles.length,
-      data: roles,
+      data: filteredRoles,
     });
   } catch (err) {
     res.status(500).json({

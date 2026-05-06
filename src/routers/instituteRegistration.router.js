@@ -101,13 +101,17 @@ router.get(
     try {
       const user = req.user;
 
+      console.log(user);
+
       const roles = await Role.find({
-        institute_id: user.institute_id,
+        institute_id: user.institute_id ?? user._id,
       }).populate("permissions");
 
       const individual_user_role_permission = roles?.find(
         (role) => role?.name?.toLowerCase() === user?.role?.toLowerCase(),
       );
+
+      console.log(individual_user_role_permission);
 
       if (!individual_user_role_permission) {
         return res.status(404).json({

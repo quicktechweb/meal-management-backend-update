@@ -13,7 +13,7 @@ const getPermissions = async (req, res) => {
 
 const seedPermissions = async (req, res) => {
   try {
-    const PERMISSIONS = require("../config/permissions");
+    const { PERMISSIONS } = require("../config/permissions");
 
     await Permission.deleteMany({});
     const data = await Permission.insertMany(PERMISSIONS);

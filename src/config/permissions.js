@@ -50,7 +50,6 @@ const PERMISSIONS = [
 
   { name: "Balance", slug: "balance.view", module: "Balance" },
   { name: "Add Balance", slug: "balance.edit", module: "Balance" },
-  { name: "View Balance", slug: "balance.view", module: "Balance" },
 
   {
     name: "Edit Services",
@@ -71,7 +70,15 @@ const PERMISSIONS = [
 ];
 const DEFAULT_ROLE_PERMISSIONS = {
   institute: ["all"],
-  user: ["routine.view", "settings.view", "orders.view"],
+  user: [
+    { name: "View Profile", slug: "profile.view", module: "Profile" },
+    { name: "Edit Profile", slug: "profile.edit", module: "Profile" },
+    {
+      name: "View Routine",
+      slug: "routine.view",
+      module: "Routine",
+    },
+  ],
 };
 
 module.exports = { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS };

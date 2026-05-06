@@ -35,6 +35,37 @@ router.post("/meal-on-off-time", instituteRequireAuth, async (req, res) => {
     });
   }
 });
+
+router.post("/meal-on-off-time", async (req, res) => {
+  try {
+    const { meal_on_off_time, institute_id } = req.body;
+
+    if (!meal_on_off_time) {
+      return res.status(400).json({
+        success: false,
+        message: "meal_on_off_time is required",
+      });
+    }
+
+    const data = await Institutemealonofftime.findOneAndUpdate(
+      { institute_id },
+      { $set: { meal_on_off_time } },
+      { upsert: true, new: true, runValidators: true },
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Saved Successfully",
+      data,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 router.get("/meal-on-off-time", instituteRequireAuth, async (req, res) => {
   const user = req.user;
 

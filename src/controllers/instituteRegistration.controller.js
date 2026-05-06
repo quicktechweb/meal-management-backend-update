@@ -3,6 +3,11 @@ const Role = require("../models/role.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Counter = require("../models/counter.model");
+const Permission = require("../models/permission.model");
+const Institutemealonofftime = require("../models/institutemealonoff.model");
+
+const { DEFAULT_ROLE_PERMISSIONS } = require("../config/permissions");
+
 const createToken = (id) => {
   return jwt.sign({ id }, process.env.Secret, { expiresIn: "7d" });
 };
@@ -56,16 +61,53 @@ const instituteRegistration = async (req, res) => {
       }
 
       // ── Step 4 ──
+      // ── Step 4 ──
       if (data.registration_step === 4) {
         updateData.approval_status = "pending";
-
         try {
+          await Institutemealonofftime.findOneAndUpdate(
+            { institute_id: data.userId },
+            { $setOnInsert: { meal_on_off_time: 1 } },
+            { upsert: true, new: true },
+          );
+        } catch (mealTimeError) {
+          console.error(
+            "Error creating default meal on/off time:",
+            mealTimeError,
+          );
+        }
+        try {
+          // ── Staff roles তৈরি ──
           const createdRoles = await Promise.all(
             data?.roles?.map((roleName) =>
               Role.create({ name: roleName, institute_id: data.userId }),
             ),
           );
+
           updateData.roles = createdRoles.map((role) => role._id);
+
+          const currentUser = await InstituteRegistration.findById(data.userId);
+
+          if (currentUser?.role === "institute") {
+            const allPermissionIds = await Permission.find({}, "_id").then(
+              (perms) => perms.map((p) => p._id),
+            );
+
+            const ownerRole = await Role.findOneAndUpdate(
+              { name: "institute", institute_id: data.userId },
+              {
+                $set: {
+                  name: "institute",
+                  institute_id: data.userId,
+                  permissions: allPermissionIds,
+                },
+              },
+              { upsert: true, new: true },
+            );
+
+            // Staff roles এর সাথে Owner role যোগ করো
+            updateData.roles = [ownerRole._id, ...updateData.roles];
+          }
         } catch (roleError) {
           console.error("Error creating roles:", roleError);
         }
@@ -354,11 +396,30 @@ const instituteUserRegistration = async (req, res) => {
     const uid = await Counter.getNextSequence(
       `institute_uid_${data.institute_id}`,
     );
-
     const hashedPassword = await bcrypt.hash(data.password, 10);
-
     const addedBy = data.added_by || "self";
     const approvalStatus = addedBy === "admin" ? "approved" : "pending";
+
+    // ── Default User Role খোঁজো বা তৈরি করো ──
+
+    const defaultSlugs = DEFAULT_ROLE_PERMISSIONS["user"].map((p) => p.slug);
+    console.log("slugs:", defaultSlugs);
+
+    const defaultPermissions = await Permission.find({
+      slug: { $in: defaultSlugs },
+    });
+    console.log("permissions found:", defaultPermissions);
+    const userRole = await Role.findOneAndUpdate(
+      { name: "user", institute_id: data.institute_id },
+      {
+        $set: {
+          name: "user",
+          institute_id: data.institute_id,
+          permissions: defaultPermissions.map((p) => p._id),
+        },
+      },
+      { upsert: true, new: true },
+    );
 
     const newUser = await InstituteRegistration.create({
       email: data.email || null,
@@ -369,7 +430,7 @@ const instituteUserRegistration = async (req, res) => {
       approval_status: approvalStatus,
       approved_at: addedBy === "admin" ? new Date() : null,
       institute_id: data.institute_id,
-
+      roles: [userRole._id], // ── এখানেই assign ──
       information: {
         full_name: data.full_name,
         nickname: data.nickname,
