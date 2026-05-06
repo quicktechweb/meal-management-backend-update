@@ -38,6 +38,8 @@ router.get(
 );
 
 router.patch("/allwise-user-meal-update/:id", async (req, res) => {
+  console.log(req);
+
   await UserAllWiseMeal.updateOne(
     { "meals._id": req.params.id },
     { $set: { "meals.$.is_attendance": req.body.is_attendance } },
@@ -45,6 +47,8 @@ router.patch("/allwise-user-meal-update/:id", async (req, res) => {
 
   res.send({ success: true });
 });
+
+
 
 router.get("/global-all-wise-user-meal", async (req, res) => {
   const [dayWiseMealList, dayWiseMealRoutineList] = await Promise.all([

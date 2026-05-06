@@ -104,11 +104,9 @@ const allwiseCreateUserMeal = async (req, res) => {
             // on/off time পার হয়ে গেছে → real conflict না
             timeLockedDays.push(dwMeal.day);
           } else {
-           
             realConflictDays.push(dwMeal.day);
           }
         } else {
-       
           realConflictDays.push(dwMeal.day);
         }
       }
@@ -391,6 +389,8 @@ const allwiseGetUserMeal = async (req, res) => {
 const allwiseGetAllMeals = async (req, res) => {
   try {
     const allWiseMealList = await UserAllWiseMeal.find();
+
+    log
 
     if (!allWiseMealList) {
       return res.status(404).json({

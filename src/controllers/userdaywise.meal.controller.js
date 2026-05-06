@@ -346,7 +346,7 @@ const daywiseGetAllMeals = async (req, res) => {
 const daywiseGetAllMealsById = async (req, res) => {
   const { id } = req.params;
   try {
-    const allWiseMealList = await UserDayWiseMeal.findOne({
+    const allWiseMealList = await UserAllWiseMeal.findOne({
       uid: id,
     });
 
