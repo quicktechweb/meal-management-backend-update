@@ -112,7 +112,6 @@ router.post("/add-balance", instituteRequireAuth, async (req, res) => {
         .json({ success: false, message: "Amount must be a positive number" });
     }
 
-
     const targetUser = await InstituteRegistration.findOne({
       _id: user,
       institute_id,
@@ -153,6 +152,27 @@ router.post("/add-balance", instituteRequireAuth, async (req, res) => {
       success: false,
       message: "Internal server error",
       error: error.message,
+    });
+  }
+});
+
+router.get("/balance-list", instituteRequireAuth, async (req, res) => {
+  try {
+    const instituteId = req.user._id;
+
+    const balanceData = await Balance.find({ added_by: instituteId })
+      .populate("user", "name email ")
+      .populate("added_by", "name email");
+
+    res.status(200).json({
+      success: true,
+      message: "Balance data fetched successfully",
+      data: balanceData,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 });
