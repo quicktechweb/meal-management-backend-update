@@ -345,6 +345,7 @@ const getApprovedInstitutes = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: users?.map((user) => ({
+        organization_type: user.information.organization_type,
         instituteType: user.information.instituteType,
         name_of_institute: user.information.name_of_institute,
         number_of_member: user.information.number_of_member,
@@ -402,8 +403,6 @@ const instituteUserRegistration = async (req, res) => {
     const addedBy = data.added_by || "self";
     const approvalStatus = addedBy === "admin" ? "approved" : "pending";
 
-    // ── Default User Role খোঁজো বা তৈরি করো ──
-
     const defaultSlugs = DEFAULT_ROLE_PERMISSIONS["user"].map((p) => p.slug);
 
     const defaultPermissions = await Permission.find({
@@ -452,6 +451,7 @@ const instituteUserRegistration = async (req, res) => {
         occupation: data.occupation,
         company: data.company,
         designation: data.designation,
+        organization_type: data.organization_type,
         year: data.year,
         name_of_the_institute: data.name_of_the_institute,
         name_of_the_mess: data.name_of_the_mess,

@@ -68,6 +68,7 @@ const instituteRegistrationSchema = new mongoose.Schema(
           occupation: String,
         },
       ],
+      organization_type: String,
       instituteType: String,
       name_of_institute: String,
       number_of_member: Number,
