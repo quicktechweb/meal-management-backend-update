@@ -6,7 +6,6 @@ const User = require("../models/user.model");
 const seedSuperAdmin = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URL);
-    console.log("Connected to MongoDB for seeding...");
 
     const existingAdmin = await User.findOne({ role: "superadmin" });
     if (existingAdmin) {

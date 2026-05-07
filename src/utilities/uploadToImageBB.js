@@ -1,8 +1,6 @@
 const axios = require("axios");
 
 const uploadToImageBB = async (files, key) => {
-  console.log(files);
-
   try {
     const fileArray = Array.isArray(files) ? files : [files];
 

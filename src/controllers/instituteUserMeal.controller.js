@@ -6,13 +6,9 @@ const getMealTypeLists = async (req, res) => {
   try {
     const user = req.user;
 
-    console.log(user, "user");
-
     const instituteAdmin = await InstituteRegistration.findOne({
       _id: user.institute_id,
     });
-
-    console.log(instituteAdmin, "institute admin");
 
     const data = await InstituteUserMeal.create({
       institute_id: user.institute_id,

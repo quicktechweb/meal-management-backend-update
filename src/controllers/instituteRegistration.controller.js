@@ -375,6 +375,8 @@ const instituteUserRegistration = async (req, res) => {
   try {
     const data = req.body;
 
+    console.log(data, " institute user data");
+
     if (!data.email && !data.phone) {
       return res.status(400).json({
         success: false,
@@ -403,12 +405,11 @@ const instituteUserRegistration = async (req, res) => {
     // ── Default User Role খোঁজো বা তৈরি করো ──
 
     const defaultSlugs = DEFAULT_ROLE_PERMISSIONS["user"].map((p) => p.slug);
-    console.log("slugs:", defaultSlugs);
 
     const defaultPermissions = await Permission.find({
       slug: { $in: defaultSlugs },
     });
-    console.log("permissions found:", defaultPermissions);
+
     const userRole = await Role.findOneAndUpdate(
       { name: "user", institute_id: data.institute_id },
       {
@@ -460,7 +461,8 @@ const instituteUserRegistration = async (req, res) => {
         room_number: data.room_number,
         experience: data.experience,
         salary: data.salary,
-        reference: data.reference,
+        references: data.references,
+        certificates: data.certificates,
         marital_status: data.marital_status,
       },
     });

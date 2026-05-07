@@ -56,7 +56,18 @@ const instituteRegistrationSchema = new mongoose.Schema(
       marital_status: String,
       salary: String,
       experience: String,
-      reference: String,
+      certificates: [
+        { degreeName: String, result: String, certificateImage: String },
+      ],
+      references: [
+        {
+          name: String,
+          nid: String,
+          nidImage: String,
+          phone: String,
+          occupation: String,
+        },
+      ],
       instituteType: String,
       name_of_institute: String,
       number_of_member: Number,

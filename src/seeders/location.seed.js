@@ -56,10 +56,6 @@ const seed = async () => {
         }
       }
     }
-
-    console.log(` ${totalDistricts} Districts Seeded`);
-    console.log(`${totalUpazilas} Upazilas Seeded`);
-    console.log("Full Bangladesh Data Seeded Successfully!");
   } catch (error) {
     console.error(" Seed Error:", error.message);
   } finally {
