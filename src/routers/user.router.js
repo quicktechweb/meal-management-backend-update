@@ -6,6 +6,8 @@ const {
   getUserData,
   instituteSignupUser,
   logout,
+  getallUserData,
+  updatePasswordByEmail,
 } = require("../controllers/user.controller");
 
 const upload = require("../utilities/multer.js");
@@ -17,6 +19,7 @@ const router = express.Router();
 // login router
 
 router.post("/login", loginUser);
+router.put("/update-pass", updatePasswordByEmail);
 
 router.post(
   "/signup",
@@ -29,6 +32,7 @@ router.post(
 
 // auth user
 router.get("/me", requireAuth, getUserData);
+router.get("/alldata", getallUserData);
 
 // institute user
 

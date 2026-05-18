@@ -503,12 +503,30 @@ const getPendingInstituteUser = async (req, res) => {
   }
 };
 
-const getApprovedInstituteUser = async (req, res) => {
-  const user = req.user;
+// const getApprovedInstituteUser = async (req, res) => {
+//   const user = req.user;
 
+//   try {
+//     const users = await InstituteRegistration.find({
+//       institute_id: user._id,
+//       approval_status: "approved",
+//     }).populate();
+
+//     return res.status(200).json({
+//       success: true,
+//       users,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+const getApprovedInstituteUser = async (req, res) => {
   try {
     const users = await InstituteRegistration.find({
-      institute_id: user._id,
       approval_status: "approved",
     }).populate();
 

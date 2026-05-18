@@ -66,16 +66,63 @@ const signupUser = async (req, res) => {
   }
 };
 
+
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, phone, password } = req.body;
 
   try {
-    const user = await User.login(email, password);
+    let user;
+
+    // 🔍 login by email
+    if (email) {
+      user = await User.findOne({ email }).select("+password");
+    }
+
+    // 🔍 login by phone
+    else if (phone) {
+      user = await User.findOne({
+        phoneNumber: phone,
+      }).select("+password");
+    }
+
+    // ❌ user not found
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    let isMatch = false;
+
+    // 🔐 if bcrypt hash
+    if (user.password.startsWith("$2b$")) {
+      isMatch = await bcrypt.compare(
+        password,
+        user.password
+      );
+    }
+
+    // 🔓 plain text password
+    else {
+      isMatch = password === user.password;
+    }
+
+    // ❌ wrong password
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        error: "Incorrect password",
+      });
+    }
+
+    // 🔑 token
     const token = createToken(user._id);
 
     res.status(200).json({
       success: true,
       message: "Login Successfully",
+
       user: {
         id: user._id,
         email: user.email,
@@ -87,17 +134,57 @@ const loginUser = async (req, res) => {
         institute_name: user.instituteName,
         type: user.userType,
         name: user.name,
-        nid_image: user.nid_image ? user.nid_image : null,
-
-        institute_image: user.institute_image ? user.institute_image : null,
+        nid_image: user.nid_image || null,
+        institute_image: user.institute_image || null,
         address: user.address,
       },
+
       token,
     });
+
   } catch (err) {
+    console.log(err);
+
     res.status(400).json({
       success: false,
       error: err.message,
+    });
+  }
+};
+
+const updatePasswordByEmail = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // 🔍 find user
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 🔐 hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // ✅ update password
+    user.password = hashedPassword;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
@@ -112,6 +199,26 @@ const getUserData = async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch user data",
+    });
+  }
+};
+
+ const getallUserData = async (req, res) => {
+  try {
+    const users = await User.find();
+
+    res.status(200).json({
+      success: true,
+      totalUsers: users.length,
+      users,
+    });
+
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
     });
   }
 };
@@ -258,4 +365,6 @@ module.exports = {
   createToken,
   instituteSignupUser,
   logout,
+  getallUserData,
+  updatePasswordByEmail,
 };
