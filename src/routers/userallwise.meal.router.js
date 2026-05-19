@@ -5,6 +5,10 @@ const {
   allwiseGetInsituteUserMeal,
   allwiseFingerprintAttend,
   allwiseGetAllMeals,
+  toggleMealStatus ,
+  allwiseGetInsituteUserMealdatashow,
+  superadminToggleMealIsOn,
+  superadminGetMealsByInstitute, superadminToggleMeal, superadminToggleAllMealsByInstitute
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
@@ -30,11 +34,31 @@ router.get("/allwise-user-meals", allwiseGetAllMeals);
 router.get("/allwise-user-meals/:id", daywiseGetAllMealsById);
 
 router.get("/fingerprint-attend", allwiseFingerprintAttend);
+router.patch(
+  "/allwise-institute-user-meal-order/toggle-meal",
+  instituteRequireAuth,
+  toggleMealStatus
+);
 
 router.get(
   "/allwise-institute-user-meal-order",
   instituteRequireAuth,
   allwiseGetInsituteUserMeal,
+);
+router.get(
+  "/allwise-institute-user-meal-order-admin",
+  // instituteRequireAuth,
+  allwiseGetInsituteUserMealdatashow,
+);
+
+router.get("/superadmin/meal-orders", superadminGetMealsByInstitute);
+router.patch("/superadmin/meal-orders/toggle-meal", superadminToggleMeal);
+router.patch("/superadmin/meal-orders/toggle-all", superadminToggleAllMealsByInstitute);
+
+router.patch(
+  "/superadmin/meal-toggle/:mealDocId/:mealId",
+  
+  superadminToggleMealIsOn
 );
 
 router.patch("/allwise-user-meal-update/:id", async (req, res) => {

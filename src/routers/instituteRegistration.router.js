@@ -19,6 +19,10 @@ const {
   userInstituteAdminData,
   getApprovedInstituteUser,
   deleteInstituteUser,
+  getApprovedInstituteallUser,
+  addBalance,
+  getBalance,
+  getAllInstituteUserspart,
 } = require("../controllers/instituteRegistration.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
 
@@ -42,13 +46,21 @@ router.get(
 
 router.get(
   "/instituteuser-approved-user",
-  
+  instituteRequireAuth,
   getApprovedInstituteUser,
 );
+router.get(
+  "/instituteuser-approved-user-all",
+  // instituteRequireAuth,
+  getApprovedInstituteallUser,
+);
 
+router.post("/add-balance/:userId", addBalance);
+router.get("/balance/:userId", getBalance);
 router.post("/instituteuser-approved-users", approveInstituteUser);
 
 router.get("/instituteuser", instituteRequireAuth, getInsituteUserData);
+router.get("/instituteuseralldata",  getAllInstituteUserspart);
 
 router.get("/insituteuser-admin-data/:id", userInstituteAdminData);
 

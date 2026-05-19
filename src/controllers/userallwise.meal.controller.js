@@ -464,6 +464,251 @@ const allwiseGetInsituteUserMeal = async (req, res) => {
   }
 };
 
+
+const allwiseGetInsituteUserMealdatashow = async (req, res) => {
+  try {
+    const allWiseMealList = await UserAllWiseMeal.find({}).populate(
+      "user_id",
+      "name email phone uid information"
+    );
+
+    if (!allWiseMealList || allWiseMealList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+
+// Toggle meal is_on by superadmin (institute-wise)
+const superadminToggleMealIsOn = async (req, res) => {
+  const { mealDocId, mealId } = req.params; // mealDocId = UserAllWiseMeal._id, mealId = meals._id
+  const { is_on } = req.body;
+
+  try {
+    const updated = await UserAllWiseMeal.findOneAndUpdate(
+      {
+        _id: mealDocId,
+        "meals._id": mealId,
+      },
+      {
+        $set: {
+          "meals.$.is_on": is_on,
+        },
+      },
+      { new: true }
+    ).populate("user_id", "name email phone uid information");
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Meal turned ${is_on ? "ON" : "OFF"} successfully`,
+      data: updated,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const toggleMealStatus = async (req, res) => {
+  const user = req.user; // institute/admin user
+  const { meal_order_id, meal_id, is_on } = req.body;
+ 
+  try {
+    if (!meal_order_id || !meal_id || typeof is_on !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "meal_order_id, meal_id and is_on (boolean) are required",
+      });
+    }
+ 
+    // Find the meal order belonging to this institute
+    const mealOrder = await UserAllWiseMeal.findOne({
+      _id: meal_order_id,
+      institute_id: user._id,
+    });
+ 
+    if (!mealOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal order not found or unauthorized",
+      });
+    }
+ 
+    // Find the specific meal inside meals array
+    const meal = mealOrder.meals.id(meal_id);
+ 
+    if (!meal) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+ 
+    // Toggle the is_on field
+    meal.is_on = is_on;
+ 
+    await mealOrder.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: `Meal has been turned ${is_on ? "ON" : "OFF"} successfully`,
+      data: mealOrder,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const superadminGetMealsByInstitute = async (req, res) => {
+  const { institute_id } = req.query;
+ 
+  try {
+    const query = institute_id ? { institute_id } : {};
+ 
+    const allWiseMealList = await UserAllWiseMeal.find(query).populate(
+      "user_id",
+      "name email phone uid information"
+    );
+ 
+    if (!allWiseMealList || allWiseMealList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+ 
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// TOGGLE meal is_on (superadmin)
+// PATCH /api/superadmin/meal-orders/toggle-meal
+// Body: { meal_order_id, meal_id, is_on }
+// ─────────────────────────────────────────────────────────────────────────────
+const superadminToggleMeal = async (req, res) => {
+  const { meal_order_id, meal_id, is_on } = req.body;
+ 
+  try {
+    if (!meal_order_id || !meal_id || typeof is_on !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "meal_order_id, meal_id এবং is_on (boolean) দিতে হবে",
+      });
+    }
+ 
+    const mealOrder = await UserAllWiseMeal.findById(meal_order_id);
+ 
+    if (!mealOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal order পাওয়া যায়নি",
+      });
+    }
+ 
+    const meal = mealOrder.meals.id(meal_id);
+ 
+    if (!meal) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal পাওয়া যায়নি",
+      });
+    }
+ 
+    meal.is_on = is_on;
+    await mealOrder.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: `Meal সফলভাবে ${is_on ? "চালু" : "বন্ধ"} করা হয়েছে`,
+      data: mealOrder,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// TOGGLE all meals of an institute ON or OFF
+// PATCH /api/superadmin/meal-orders/toggle-all
+// Body: { institute_id, is_on }
+// ─────────────────────────────────────────────────────────────────────────────
+const superadminToggleAllMealsByInstitute = async (req, res) => {
+  const { institute_id, is_on } = req.body;
+ 
+  try {
+    if (!institute_id || typeof is_on !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "institute_id এবং is_on (boolean) দিতে হবে",
+      });
+    }
+ 
+    const mealOrders = await UserAllWiseMeal.find({ institute_id });
+ 
+    if (!mealOrders || mealOrders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "কোনো meal order পাওয়া যায়নি",
+      });
+    }
+ 
+    for (const order of mealOrders) {
+      order.meals.forEach((meal) => {
+        meal.is_on = is_on;
+      });
+      await order.save();
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: `Institute-এর সব meal ${is_on ? "চালু" : "বন্ধ"} করা হয়েছে`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+
 module.exports = {
   allwiseCreateUserMeal,
   allwiseGetUserMeal,
@@ -471,4 +716,10 @@ module.exports = {
   allwiseFingerprintAttend,
   allwiseGetAllMeals,
   allwiseGetAllMealsById,
+  toggleMealStatus,
+  allwiseGetInsituteUserMealdatashow,
+  superadminToggleMealIsOn,
+   superadminGetMealsByInstitute,
+  superadminToggleMeal,
+  superadminToggleAllMealsByInstitute,
 };

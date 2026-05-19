@@ -503,28 +503,28 @@ const getPendingInstituteUser = async (req, res) => {
   }
 };
 
-// const getApprovedInstituteUser = async (req, res) => {
-//   const user = req.user;
-
-//   try {
-//     const users = await InstituteRegistration.find({
-//       institute_id: user._id,
-//       approval_status: "approved",
-//     }).populate();
-
-//     return res.status(200).json({
-//       success: true,
-//       users,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// };
-
 const getApprovedInstituteUser = async (req, res) => {
+  const user = req.user;
+
+  try {
+    const users = await InstituteRegistration.find({
+      institute_id: user._id,
+      approval_status: "approved",
+    }).populate();
+
+    return res.status(200).json({
+      success: true,
+      users,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getApprovedInstituteallUser = async (req, res) => {
   try {
     const users = await InstituteRegistration.find({
       approval_status: "approved",
@@ -533,6 +533,116 @@ const getApprovedInstituteUser = async (req, res) => {
     return res.status(200).json({
       success: true,
       users,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+const addBalance = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, note } = req.body;
+ 
+    // Validation
+    if (!amount || isNaN(amount) || Number(amount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid amount. Must be a positive number.",
+      });
+    }
+ 
+    const user = await InstituteRegistration.findById(userId);
+ 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+ 
+    if (user.approval_status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        message: "User is not approved.",
+      });
+    }
+ 
+    const previousBalance = user.balance || 0;
+    const addedAmount = Number(amount);
+    const newBalance = previousBalance + addedAmount;
+ 
+    // Balance update
+    user.balance = newBalance;
+ 
+    // Optional: transaction history log করতে চাইলে
+    if (!user.balance_transactions) {
+      user.balance_transactions = [];
+    }
+    user.balance_transactions.push({
+      amount: addedAmount,
+      note: note || "",
+      previous_balance: previousBalance,
+      new_balance: newBalance,
+      added_at: new Date(),
+    });
+ 
+    await user.save();
+ 
+    return res.status(200).json({
+      success: true,
+      message: "Balance added successfully.",
+      data: {
+        user_id: userId,
+        added_amount: addedAmount,
+        previous_balance: previousBalance,
+        new_balance: newBalance,
+        note: note || "",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+ 
+/**
+ * GET /api/balance/:userId
+ * একটা user এর current balance দেখতে
+ */
+const getBalance = async (req, res) => {
+  try {
+    const { userId } = req.params;
+ 
+    const user = await InstituteRegistration.findById(userId).select(
+      "balance balance_transactions information.full_name email uid"
+    );
+ 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+ 
+    return res.status(200).json({
+      success: true,
+      data: {
+        user_id: userId,
+        name: user.information?.full_name,
+        email: user.email,
+        uid: user.uid,
+        current_balance: user.balance || 0,
+        transactions: user.balance_transactions || [],
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -641,6 +751,24 @@ const updateInstituteUserData = async (req, res) => {
   }
 };
 
+const getAllInstituteUserspart = async (req, res) => {
+  try {
+    const instituteUsers = await InstituteRegistration.find({});
+
+    res.status(200).json({
+      success: true,
+      count: instituteUsers.length,
+      data: instituteUsers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch institute users",
+      error: error.message,
+    });
+  }
+};
+
 const userInstituteAdminData = async (req, res) => {
   try {
     const { id } = req.params;
@@ -719,4 +847,8 @@ module.exports = {
   userInstituteAdminData,
   getApprovedInstituteUser,
   deleteInstituteUser,
+  getApprovedInstituteallUser,
+   addBalance, 
+  getBalance,
+  getAllInstituteUserspart
 };
