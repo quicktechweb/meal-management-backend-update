@@ -8,6 +8,8 @@ const {
   toggleMealStatus ,
   allwiseGetInsituteUserMealdatashow,
   superadminToggleMealIsOn,
+  getpartorderDayWiseAllMealForUser,
+  allshowgetpartorderDayWiseAllMealForUser,
   superadminGetMealsByInstitute, superadminToggleMeal, superadminToggleAllMealsByInstitute
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
@@ -49,6 +51,16 @@ router.get(
   "/allwise-institute-user-meal-order-admin",
   // instituteRequireAuth,
   allwiseGetInsituteUserMealdatashow,
+);
+router.get(
+  "/alldaymeal",
+  instituteRequireAuth,
+  getpartorderDayWiseAllMealForUser,
+);
+router.get(
+  "/alldaymealadmindatashow",
+  // instituteRequireAuth,
+  allshowgetpartorderDayWiseAllMealForUser,
 );
 
 router.get("/superadmin/meal-orders", superadminGetMealsByInstitute);

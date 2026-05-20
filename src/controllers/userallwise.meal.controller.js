@@ -2,7 +2,8 @@ const axios = require("axios");
 
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
 const UserDayWiseMeal = require("../models/userdaywise.meal.model");
-
+const UserDayWiseRoutineMeal = require("../models/userdaywiseroutine.meal.model");
+const UserallWiseRoutineMeal = require("../models/userallwiseroutine.meal.model");
 const Institutemealonofftime = require("../models/institutemealonoff.model");
 
 const InstituteRegistration = require("../models/instituteRegistration.model");
@@ -531,6 +532,98 @@ const superadminToggleMealIsOn = async (req, res) => {
   }
 };
 
+const getpartorderDayWiseAllMealForUser = async (req, res) => {
+  const user = req.user;
+
+  try {
+    const [allWiseMealList, dayWiseMealList, dayWiseRoutineMealList, allWiseRoutineMealList] = await Promise.all([
+      UserAllWiseMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
+      UserDayWiseMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
+      UserDayWiseRoutineMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
+      UserallWiseRoutineMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
+    ]);
+
+    const result = {
+      dayWise: [...dayWiseMealList, ...dayWiseRoutineMealList],
+      allWise: [...allWiseMealList, ...allWiseRoutineMealList],
+    };
+
+    if (result.dayWise.length === 0 && result.allWise.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+const allshowgetpartorderDayWiseAllMealForUser = async (req, res) => {
+  try {
+    const [allWiseMealList, dayWiseMealList, dayWiseRoutineMealList, allWiseRoutineMealList] = await Promise.all([
+      UserAllWiseMeal.find()
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "email phone information"),
+      UserDayWiseMeal.find()
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "email phone information"),
+      UserDayWiseRoutineMeal.find()
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "email phone information"),
+      UserallWiseRoutineMeal.find()
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "email phone information"),
+    ]);
+
+    // Institute data format করার helper function
+    const formatInstituteData = (list) =>
+      list.map((meal) => {
+        const mealObj = meal.toObject();
+        if (mealObj.institute_id) {
+          const info = mealObj.institute_id.information || {};
+          mealObj.institute_id = {
+            _id: mealObj.institute_id._id,
+            email: mealObj.institute_id.email,
+            phone: mealObj.institute_id.phone,
+            instituteType: info.instituteType,
+            name_of_institute: info.name_of_institute,
+            number_of_member: info.number_of_member,
+            username: info.username,
+            name_of_hall: info.name_of_hall,
+            name_of_mess: info.name_of_mess,
+          };
+        }
+        return mealObj;
+      });
+
+    const result = {
+      dayWise: formatInstituteData([...dayWiseMealList, ...dayWiseRoutineMealList]),
+      allWise: formatInstituteData([...allWiseMealList, ...allWiseRoutineMealList]),
+    };
+
+    if (result.dayWise.length === 0 && result.allWise.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const toggleMealStatus = async (req, res) => {
   const user = req.user; // institute/admin user
   const { meal_order_id, meal_id, is_on } = req.body;
@@ -722,4 +815,6 @@ module.exports = {
    superadminGetMealsByInstitute,
   superadminToggleMeal,
   superadminToggleAllMealsByInstitute,
+  getpartorderDayWiseAllMealForUser,
+  allshowgetpartorderDayWiseAllMealForUser,
 };
