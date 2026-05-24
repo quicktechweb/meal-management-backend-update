@@ -64,6 +64,7 @@ const instituteRegistration = async (req, res) => {
       // ── Step 4 ──
       if (data.registration_step === 4) {
         updateData.approval_status = "pending";
+        updateData.isRegister = true;
         try {
           await Institutemealonofftime.findOneAndUpdate(
             { institute_id: data.userId },
@@ -134,56 +135,83 @@ const instituteRegistration = async (req, res) => {
     }
 
     // ── New Registration: step 1 ──────────────────────────
-    if (!data.email && !data.phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Email or Phone number required",
-      });
-    }
+   if (!data.email && !data.phone) {
+  return res.status(400).json({
+    success: false,
+    message: "Email or Phone number required",
+  });
+}
 
-    const query = [];
-    if (data.email) query.push({ email: data.email });
-    if (data.phone) query.push({ phone: data.phone });
+const query = [];
+if (data.email) query.push({ email: data.email });
+if (data.phone) query.push({ phone: data.phone });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(data?.information?.password, salt);
+const existingUser = await InstituteRegistration.findOne({ $or: query });
 
-    const newUser = await InstituteRegistration.findOneAndUpdate(
-      {
-        $or: query,
-        approval_status: { $ne: "pending" },
-        registration_step: { $lt: 4 },
-      },
-      {
-        $set: {
-          ...(data.email && { email: data.email }),
-          ...(data.phone && { phone: data.phone }),
-          ...(data.role && { role: data.role }),
-          information: {
-            ...data.information,
-            password: hashedPassword,
-          },
-          services: {},
-          routine: {},
-          admin_info: {},
-          registration_step: 1,
+
+if (existingUser && existingUser.isRegister === true) {
+  return res.status(400).json({
+    success: false,
+    message: "This email or phone already have a completed account.",
+  });
+}
+
+const salt = await bcrypt.genSalt(10);
+const hashedPassword = await bcrypt.hash(data?.information?.password, salt);
+
+let newUser;
+
+if (existingUser) {
+  // isRegister false — update করো
+  newUser = await InstituteRegistration.findByIdAndUpdate(
+    existingUser._id,
+    {
+      $set: {
+        ...(data.email && { email: data.email }),
+        ...(data.phone && { phone: data.phone }),
+        ...(data.role && { role: data.role }),
+        information: {
+          ...data.information,
+          password: hashedPassword,
         },
+        services: {},
+        routine: {},
+        admin_info: {},
+        registration_step: 1,
       },
-      { new: true, upsert: true },
-    );
+    },
+    { new: true }
+  );
+} else {
+  // নতুন user create করো
+  newUser = await InstituteRegistration.create({
+    ...(data.email && { email: data.email }),
+    ...(data.phone && { phone: data.phone }),
+    ...(data.role && { role: data.role }),
+    information: {
+      ...data.information,
+      password: hashedPassword,
+    },
+    services: {},
+    routine: {},
+    admin_info: {},
+    registration_step: 1,
+  });
+}
 
-    if (!newUser) {
-      return res.status(400).json({
-        success: false,
-        message: "This email and phone number already have an account.",
-      });
-    }
+if (!newUser) {
+  return res.status(400).json({
+    success: false,
+    message: "Registration failed.",
+  });
+}
 
-    return res.status(200).json({
-      success: true,
-      message: "Step 1 added Successfully",
-      userId: newUser._id,
-    });
+return res.status(200).json({
+  success: true,
+  message: "Step 1 added Successfully",
+  userId: newUser._id,
+});
+    
   } catch (error) {
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
