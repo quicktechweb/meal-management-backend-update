@@ -77,6 +77,7 @@ const InventoryPurchaseProductRoute = require("./routers/inventory.purchaseprodu
 const InventoryGlobalAmountRoute = require("./routers/inventoryglobalamount.router");
 
 const InventoryStockRoute = require("./routers/inventory.stock.router");
+const feedbackroute = require("./routers/FeedbackRoute");
 
 const InventorySummaryAllWise = require("./routers/inventorySummaryAllWise.router");
 
@@ -166,6 +167,7 @@ app.use("/api", InventoryGlobalAmountRoute);
 app.use("/api", InventoryStockRoute);
 
 app.use("/api", InventorySummaryAllWise);
+app.use("/api/feedback", feedbackroute);
 
 // firebase auth
 app.use("/api/firebaseAuth", firebaseauthRoute);

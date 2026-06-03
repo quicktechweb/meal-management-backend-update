@@ -28,6 +28,43 @@ const instituteRegistrationSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    balance_history: [
+  {
+    type: {
+      type: String,
+      enum: ["credit", "debit"],
+      required: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+    },
+    balance_before: {
+      type: Number,
+      required: true,
+    },
+    balance_after: {
+      type: Number,
+      required: true,
+    },
+    note: {
+      type: String,
+      default: "Balance updated",
+    },
+    ref: {
+      type: String,
+    },
+    updated_by: {
+      type: String,
+      default: "system",
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
     //  Admin Approval System
     approval_status: {
       type: String,
