@@ -80,6 +80,8 @@ const InventoryStockRoute = require("./routers/inventory.stock.router");
 const feedbackroute = require("./routers/FeedbackRoute");
 
 const InventorySummaryAllWise = require("./routers/inventorySummaryAllWise.router");
+const materialRoutes  = require("./routers/materialRoute");
+const allmaterialproduct  = require("./routers/AllMaterialproductRoute");
 
 const connectDB = require("./connectdb");
 
@@ -168,6 +170,8 @@ app.use("/api", InventoryStockRoute);
 
 app.use("/api", InventorySummaryAllWise);
 app.use("/api/feedback", feedbackroute);
+app.use("/api/submaterial", materialRoutes);
+app.use("/api/allmetrialproductadd", allmaterialproduct);
 
 // firebase auth
 app.use("/api/firebaseAuth", firebaseauthRoute);
