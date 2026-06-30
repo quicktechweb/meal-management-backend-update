@@ -10,6 +10,7 @@ const {
   superadminToggleMealIsOn,
   getpartorderDayWiseAllMealForUser,
   allshowgetpartorderDayWiseAllMealForUser,
+  daywiseinstiuteRoutineGetUserMeal,
   superadminGetMealsByInstitute, superadminToggleMeal, superadminToggleAllMealsByInstitute
 } = require("../controllers/userallwise.meal.controller");
 const instituteRequireAuth = require("../middlewares/instituteAuth.middleware");
@@ -34,6 +35,7 @@ router.get("/allwise-user-meal-list", instituteRequireAuth, allwiseGetUserMeal);
 router.get("/allwise-user-meals", allwiseGetAllMeals);
 
 router.get("/allwise-user-meals/:id", daywiseGetAllMealsById);
+router.get("/allwise-institute-alluser-meals/:id", daywiseinstiuteRoutineGetUserMeal);
 
 router.get("/fingerprint-attend", allwiseFingerprintAttend);
 router.patch(

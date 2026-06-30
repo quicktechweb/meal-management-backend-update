@@ -2,6 +2,7 @@ const express = require("express");
 const {
   dayWiseUserCreateUserMeal,
   daywiseGetUserMeal,
+  daywiseinstitutedGetUserMeal,
 
   daywiseGetAllMealsById,
 } = require("../controllers/userdaywise.meal.controller");
@@ -22,6 +23,7 @@ router.get("/daywise-user-meal-list", instituteRequireAuth, daywiseGetUserMeal);
 router.get("/daywise-user-meals", daywiseGetUserMeal);
 
 router.get("/daywise-user-meals/:id", daywiseGetAllMealsById);
+router.get("/daywise-institute-user-meals/:id", daywiseinstitutedGetUserMeal);
 
 router.patch("/daywise-user-meal-update/:id", async (req, res) => {
   await UserDayWiseMeal.updateOne(

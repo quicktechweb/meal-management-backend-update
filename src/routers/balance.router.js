@@ -177,6 +177,72 @@ router.get("/balance-list", instituteRequireAuth, async (req, res) => {
   }
 });
 
+
+router.get("/all-part-balance-list", async (req, res) => {
+  try {
+    const { email, userId } = req.query; // ?email=naymur407@gmail.com বা ?userId=69e84df0...
+
+    const balanceData = await Balance.find({})
+      .populate("user", "name email")
+      .populate("added_by", "name email");
+
+    // ───── যদি email/userId দেওয়া থাকে, তাহলে ফিল্টার করো ─────
+    let filteredData = balanceData;
+
+    if (email) {
+      filteredData = balanceData.filter(
+        (b) => b.user?.email?.toLowerCase() === email.toLowerCase().trim()
+      );
+    } else if (userId) {
+      filteredData = balanceData.filter(
+        (b) => String(b.user?._id) === String(userId)
+      );
+    }
+
+    // ───── Total হিসাব ─────
+    const totalAmount = filteredData.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const lastEntry = filteredData[filteredData.length - 1];
+    const currentBalance = lastEntry ? lastEntry.balance : 0;
+
+    // ───── Console এ প্রিন্ট (শুধু email/userId দেওয়া থাকলে) ─────
+    if (email || userId) {
+      console.log("\n==================== USER BALANCE HISTORY ====================");
+      console.log(`👤 User: ${filteredData[0]?.user?.name || "-"} (${filteredData[0]?.user?.email || "-"})`);
+      console.log(`🔢 মোট Transaction: ${filteredData.length}`);
+      console.log(`💰 মোট টাকা ইন হয়েছে: ৳${totalAmount}`);
+      console.log(`📊 শেষ ব্যালেন্স: ৳${currentBalance}\n`);
+
+      console.table(
+        filteredData.map((t) => ({
+          ID: t._id,
+          Amount: t.amount,
+          "Balance After": t.balance,
+          Note: t.note || "-",
+          Date: new Date(t.createdAt).toLocaleString("en-BD"),
+          "Added By": t.added_by?.email || t.added_by?.name || "-",
+        }))
+      );
+      console.log("==================== END ====================\n");
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Balance data fetched successfully",
+      summary: {
+        totalTransactions: filteredData.length,
+        totalAmount,
+        currentBalance,
+      },
+      data: filteredData,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
 // ─────────────────────────────────────────────
 // GET /balance/history/:userId
 // ─────────────────────────────────────────────

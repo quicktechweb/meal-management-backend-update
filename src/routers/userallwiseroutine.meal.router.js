@@ -9,6 +9,9 @@ const {
   allwiseRoutineGetAllMeals,
   allwiseRoutineGetAllMealsById,
   allwiseRoutineGetInsituteUserMeal,
+  allwiseRoutineGetUserMealcount,
+  allwiseRoutineGetallpartsUserMeal,
+  allwiseinstitutepartRoutineGetUserMeal,
 } = require("../controllers/userallwiseroutine.meal.controller");
 
 const router = express.Router();
@@ -24,8 +27,14 @@ router.get(
   instituteRequireAuth,
   allwiseRoutineGetUserMeal,
 );
+router.get(
+  "/allwise-user-meal-list-routine-count/:id",
+  allwiseRoutineGetUserMealcount,
+);
 
 router.get("/allwiseroutine-user-meals", allwiseRoutineGetAllMeals);
+router.get("/allwiseroutine-allpartuser-meals", allwiseRoutineGetallpartsUserMeal);
+router.get("/allwiseroutine-instutitepart-user-meals/:id", allwiseinstitutepartRoutineGetUserMeal);
 
 router.get("/allwiseroutine-user-meals/:id", allwiseRoutineGetAllMealsById);
 

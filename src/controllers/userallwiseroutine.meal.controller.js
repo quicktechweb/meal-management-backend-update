@@ -366,11 +366,89 @@ const allwiseRoutineGetUserMeal = async (req, res) => {
   }
 };
 
+
+const allwiseinstitutepartRoutineGetUserMeal = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const allWiseMealList = await UserAllWiseRoutineMeal.find({
+      institute_id: id,
+    });
+
+    if (!allWiseMealList || allWiseMealList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const allwiseRoutineGetUserMealcount = async (req, res) => {
+  const { id } = req.params; // institute_id
+
+  try {
+    const allWiseMealList = await UserAllWiseRoutineMeal.findOne({
+      institute_id: id,
+    });
+
+    if (!allWiseMealList) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 const allwiseRoutineGetAllMeals = async (req, res) => {
   try {
     const allWiseMealList = await UserAllWiseRoutineMeal.find();
 
     if (!allWiseMealList) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+const allwiseRoutineGetallpartsUserMeal = async (req, res) => {
+  try {
+    const allWiseMealList = await UserAllWiseRoutineMeal.find();
+
+    if (!allWiseMealList || allWiseMealList.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Meal not found",
@@ -446,7 +524,9 @@ module.exports = {
   allwiseRoutineCreateUserMeal,
   allwiseRoutineGetUserMeal,
   allwiseRoutineGetInsituteUserMeal,
-
+ allwiseRoutineGetUserMealcount,
   allwiseRoutineGetAllMeals,
   allwiseRoutineGetAllMealsById,
+  allwiseinstitutepartRoutineGetUserMeal,
+  allwiseRoutineGetallpartsUserMeal,
 };

@@ -320,6 +320,35 @@ const daywiseGetUserMeal = async (req, res) => {
   }
 };
 
+
+const daywiseinstitutedGetUserMeal = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const allWiseMealList = await UserDayWiseMeal.find({
+      institute_id: id,
+    });
+
+    if (!allWiseMealList || allWiseMealList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+
 const daywiseGetAllMeals = async (req, res) => {
   try {
     const allWiseMealList = await UserDayWiseMeal.find();
@@ -374,4 +403,5 @@ module.exports = {
   daywiseGetUserMeal,
   daywiseGetAllMeals,
   daywiseGetAllMealsById,
+  daywiseinstitutedGetUserMeal
 };

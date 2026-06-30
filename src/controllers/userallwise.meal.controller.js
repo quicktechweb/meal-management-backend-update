@@ -387,13 +387,36 @@ const allwiseGetUserMeal = async (req, res) => {
   }
 };
 
+// const allwiseGetAllMeals = async (req, res) => {
+//   try {
+//     const allWiseMealList = await UserAllWiseMeal.find();
+
+//     log
+
+//     if (!allWiseMealList) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Meal not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       data: allWiseMealList,
+//     });
+//   } catch (err) {
+//     res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
 const allwiseGetAllMeals = async (req, res) => {
   try {
     const allWiseMealList = await UserAllWiseMeal.find();
 
-    log
-
-    if (!allWiseMealList) {
+    if (!allWiseMealList || allWiseMealList.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Meal not found",
@@ -411,6 +434,7 @@ const allwiseGetAllMeals = async (req, res) => {
     });
   }
 };
+
 
 const allwiseGetAllMealsById = async (req, res) => {
   const { id } = req.params;
@@ -532,21 +556,111 @@ const superadminToggleMealIsOn = async (req, res) => {
   }
 };
 
+
 const getpartorderDayWiseAllMealForUser = async (req, res) => {
   const user = req.user;
 
   try {
     const [allWiseMealList, dayWiseMealList, dayWiseRoutineMealList, allWiseRoutineMealList] = await Promise.all([
-      UserAllWiseMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
-      UserDayWiseMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
-      UserDayWiseRoutineMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
-      UserallWiseRoutineMeal.find({ institute_id: user._id }).populate("user_id", "name email phone uid information"),
+      UserAllWiseMeal.find({ institute_id: user._id })
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "information email phone"),
+      UserDayWiseMeal.find({ institute_id: user._id })
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "information email phone"),
+      UserDayWiseRoutineMeal.find({ institute_id: user._id })
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "information email phone"),
+      UserallWiseRoutineMeal.find({ institute_id: user._id })
+        .populate("user_id", "name email phone uid information")
+        .populate("institute_id", "information email phone"),
     ]);
 
     const result = {
       dayWise: [...dayWiseMealList, ...dayWiseRoutineMealList],
       allWise: [...allWiseMealList, ...allWiseRoutineMealList],
     };
+
+    // ================= USER-WISE SUMMARY BUILD =================
+    const userSummary = {}; // { userId: { userName, breakfast, lunch, dinner, total, entries: [] } }
+    let instituteName = "(নাম পাওয়া যায়নি)";
+
+    const allDocs = [...result.dayWise, ...result.allWise];
+
+    allDocs.forEach((doc) => {
+      // institute name — information.name_of_institute অথবা username থেকে
+      if (doc.institute_id?.information) {
+        instituteName =
+          doc.institute_id.information.name_of_institute ||
+          doc.institute_id.information.username ||
+          instituteName;
+      }
+
+      const userDoc = doc.user_id;
+      const userId = userDoc?._id ? String(userDoc._id) : String(doc.user_id);
+
+      // user name — top-level "name" না থাকলে information.username বা uid fallback
+      const userName =
+        userDoc?.name ||
+        userDoc?.information?.username ||
+        (userDoc?.uid ? `User #${userDoc.uid}` : "(নাম পাওয়া যায়নি)");
+
+      if (!userSummary[userId]) {
+        userSummary[userId] = {
+          userName,
+          email: userDoc?.email || "-",
+          phone: userDoc?.phone || "-",
+          total: 0,
+          breakfast: 0,
+          lunch: 0,
+          dinner: 0,
+          entries: [],
+        };
+      }
+
+      (doc.meals || []).forEach((meal) => {
+        const type = (meal.meal_type || "").toLowerCase();
+         console.log("🔍 FULL MEAL OBJECT:", JSON.stringify(meal, null, 2));
+
+        userSummary[userId].total += 1;
+        if (type === "breakfast") userSummary[userId].breakfast += 1;
+        else if (type === "lunch") userSummary[userId].lunch += 1;
+        else if (type === "dinner") userSummary[userId].dinner += 1;
+
+        userSummary[userId].entries.push({
+          day: meal.day,
+          meal_type: meal.meal_type,
+          is_on: meal.is_on,
+           balance_deducted: meal.balance_deducted, 
+        });
+      });
+    });
+
+    // ================= PRINT FINAL TABLE =================
+    console.log("\n==================== USER-WISE MEAL SUMMARY ====================");
+    console.log(`🏢 Institute: ${instituteName}  (id: ${user._id})\n`);
+
+    console.table(
+      Object.entries(userSummary).map(([userId, u]) => ({
+        "User ID": userId,
+        "User Name": u.userName,
+        Email: u.email,
+        Phone: u.phone,
+        "Total Meal": u.total,
+        "🌅 Breakfast": u.breakfast,
+        "☀️ Lunch": u.lunch,
+        "🌙 Dinner": u.dinner,
+      }))
+    );
+
+    Object.entries(userSummary).forEach(([userId, u]) => {
+      console.log(`\n👤 ${u.userName} (id: ${userId}) — দিনভিত্তিক বিস্তারিত:`);
+     u.entries.forEach((m, i) => {
+  console.log(`   ${i + 1}. ${m.day} - ${m.meal_type}  (is_on: ${m.is_on}, balance_deducted: ${m.balance_deducted})`);
+});
+    });
+
+    console.log("\n==================== SUMMARY END ====================\n");
 
     if (result.dayWise.length === 0 && result.allWise.length === 0) {
       return res.status(404).json({
@@ -560,10 +674,10 @@ const getpartorderDayWiseAllMealForUser = async (req, res) => {
       data: result,
     });
   } catch (err) {
+    console.log("🔥 ERROR:", err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
 
 const allshowgetpartorderDayWiseAllMealForUser = async (req, res) => {
   try {
@@ -801,6 +915,33 @@ const superadminToggleAllMealsByInstitute = async (req, res) => {
   }
 };
 
+const daywiseinstiuteRoutineGetUserMeal = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const allWiseMealList = await UserAllWiseMeal.find({
+      institute_id: id,
+    });
+
+    if (!allWiseMealList || allWiseMealList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Meal not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: allWiseMealList,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 
 module.exports = {
   allwiseCreateUserMeal,
@@ -817,4 +958,5 @@ module.exports = {
   superadminToggleAllMealsByInstitute,
   getpartorderDayWiseAllMealForUser,
   allshowgetpartorderDayWiseAllMealForUser,
+  daywiseinstiuteRoutineGetUserMeal
 };
