@@ -7,6 +7,18 @@ const UserDayWiseOrder = require("../models/UserDayWiseOrder.model");
 const formatCutoff = require("../config/formatCutoff");
 
 const checkMealTimeStatus = require("../config/checkMealTimeStatus");
+function getBDNow() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utcMs + 6 * 60 * 60000);
+}
+
+function getBDDateString(bdNow) {
+  const y = bdNow.getFullYear();
+  const m = String(bdNow.getMonth() + 1).padStart(2, "0");
+  const d = String(bdNow.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 const dayWiseUserCreateUserMeal = async (req, res) => {
   try {
@@ -33,8 +45,9 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       "Friday",
       "Saturday",
     ];
-    const now = new Date();
+    const now = getBDNow();
     const todayDayName = dayNames[now.getDay()];
+    const todayDateStr = getBDDateString(now); // ⬅️ নতুন
 
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -111,6 +124,7 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
     const mealStatuses = [];
 
     let totalDeduct = 0;
+    let totalInstituteDelta = 0;
     const balanceOps = [];
 
     for (const incomingMeal of meals) {
@@ -183,30 +197,24 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
 
       // ─── Balance logic ───────────────────────────────────────────────────────
       const wasOn = dbMeal?.is_on ?? false;
-      const wasDeducted = dbMeal?.balance_deducted ?? false;
+      // ⬇️ বদলানো হয়েছে — balance_deducted এর বদলে last_deducted_date দিয়ে "আজকে কাটা হয়েছে কিনা" চেক
+      const wasDeductedToday = dbMeal?.last_deducted_date === todayDateStr;
       let balance_deducted = dbMeal?.balance_deducted ?? false;
+      let last_deducted_date = dbMeal?.last_deducted_date ?? null; // ⬅️ নতুন
 
-      if (is_on === true && !wasOn && !wasDeducted) {
-        totalDeduct += package_price;
-        balance_deducted = true;
-        balanceOps.push({
-          day,
-          meal_type,
-          op: "deduct",
-          amount: package_price,
-        });
-      } else if (is_on === false && wasOn && wasDeducted) {
-        totalDeduct -= package_price;
+      if (is_on === true && !wasOn) {
+        // ⛔ এখনই কাটবো না — cron job meal_on_off_time অনুযায়ী নিজে থেকে কাটবে
         balance_deducted = false;
-        balanceOps.push({
-          day,
-          meal_type,
-          op: "refund",
-          amount: package_price,
-        });
+      } else if (is_on === false && wasOn && wasDeductedToday) {
+        // আজকেই কাটা হয়ে গিয়েছিল (cron চালিয়ে দিয়েছে) — এখন OFF করছে, রিফান্ড দিতে হবে
+        totalDeduct -= package_price;          // user কে ফেরত
+        totalInstituteDelta -= package_price;  // institute থেকে ফেরত নেওয়া হবে
+        balance_deducted = false;
+        last_deducted_date = null;             // ⬅️ রিফান্ড দিলে date ক্লিয়ার করে দাও
+        balanceOps.push({ day, meal_type, op: "refund", amount: package_price });
       }
 
-      validMeals.push({ ...incomingMeal, balance_deducted });
+      validMeals.push({ ...incomingMeal, balance_deducted, last_deducted_date }); // ⬅️ last_deducted_date যোগ হয়েছে
       mealStatuses.push({
         day,
         meal_type,
@@ -252,6 +260,15 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
       await InstituteRegistration.findByIdAndUpdate(
         user_id,
         { $inc: { balance: -totalDeduct } },
+        { new: true },
+      );
+    }
+
+    // শুধু OFF/refund কেসে চলবে, ON toggle-এ কিছু হবে না
+    if (totalInstituteDelta !== 0) {
+      await InstituteRegistration.findByIdAndUpdate(
+        institute_id,
+        { $inc: { balance: totalInstituteDelta } },
         { new: true },
       );
     }

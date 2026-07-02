@@ -25,6 +25,10 @@ const userDayWiseMealSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+        last_deducted_date: {
+  type: String,   // "2026-07-02" ফরম্যাটে
+  default: null,
+},
         is_attendance: {
           type: Boolean,
           default: false,
@@ -44,5 +48,11 @@ const userDayWiseMealSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+userDayWiseMealSchema.index({
+  "meals.day": 1,
+  "meals.is_on": 1,
+  "meals.balance_deducted": 1,
+});
 
 module.exports = mongoose.model("UserDayWiseMeal", userDayWiseMealSchema);

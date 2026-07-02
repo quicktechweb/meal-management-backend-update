@@ -4,7 +4,7 @@ require("./corn/Routinemeal.cron");
 const cors = require("cors");
 const dns = require("dns").promises;
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
-
+require("./jobs/mealAutoDeductCron"); // চালু হওয়ার সাথে সাথে cron শুরু হবে
 const express = require("express");
 const morgan = require("morgan");
 
