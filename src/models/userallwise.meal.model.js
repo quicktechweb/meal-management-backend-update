@@ -33,6 +33,12 @@ const userAllWiseMealSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+        deduction_history: [          // ⬅️ নতুন — যোগ করুন
+          {
+            date: { type: String, required: true },
+            amount: { type: Number, required: true },
+          },
+        ],
         selected_items: [
           {
             title: String,

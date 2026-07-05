@@ -23,10 +23,20 @@ const userAllWiseRoutineMealSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+         last_deducted_date: {          // ⬅️ নতুন
+          type: String,                // "2026-07-05" ফরম্যাটে
+          default: null,
+        },
         is_attendance: {
           type: Boolean,
           default: false,
         },
+         deduction_history: [          // ⬅️ নতুন — যোগ করুন
+          {
+            date: { type: String, required: true },
+            amount: { type: Number, required: true },
+          },
+        ],
         selected_items: [
           {
             title: String,
@@ -43,6 +53,11 @@ const userAllWiseRoutineMealSchema = new mongoose.Schema(
   },
 );
 
+userAllWiseRoutineMealSchema.index({
+  "meals.day": 1,
+  "meals.is_on": 1,
+  "meals.balance_deducted": 1,
+});
 module.exports = mongoose.model(
   "UserAllWiseRoutineMeal",
   userAllWiseRoutineMealSchema,

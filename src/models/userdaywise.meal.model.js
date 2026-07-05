@@ -29,6 +29,12 @@ const userDayWiseMealSchema = new mongoose.Schema(
   type: String,   // "2026-07-02" ফরম্যাটে
   default: null,
 },
+ deduction_history: [          // ⬅️ নতুন — যোগ করুন
+          {
+            date: { type: String, required: true },
+            amount: { type: Number, required: true },
+          },
+        ],
         is_attendance: {
           type: Boolean,
           default: false,

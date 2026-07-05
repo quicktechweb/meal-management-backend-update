@@ -1,10 +1,13 @@
 require("@dotenvx/dotenvx").config();
-require("./corn/balanceduduct.corn");
-require("./corn/Routinemeal.cron");
+// require("./corn/balanceduduct.corn");
+// require("./corn/Routinemeal.cron");
 const cors = require("cors");
 const dns = require("dns").promises;
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
-require("./jobs/mealAutoDeductCron"); // চালু হওয়ার সাথে সাথে cron শুরু হবে
+require("./jobs/mealAutoDeductCron"); 
+require("./jobs/allWiseMealAutoDeductCron"); 
+require("./jobs/routineDayMealAutoDeductCron");
+require("./jobs/allWiseRoutineMealAutoDeductCron");
 const express = require("express");
 const morgan = require("morgan");
 

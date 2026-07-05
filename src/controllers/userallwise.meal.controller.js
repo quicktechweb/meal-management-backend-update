@@ -14,6 +14,274 @@ const formatCutoff = require("../config/formatCutoff");
 
 const checkMealTimeStatus = require("../config/checkMealTimeStatus");
 
+// const allwiseCreateUserMeal = async (req, res) => {
+//   try {
+//     const { type, meals, routine_type } = req.body;
+
+//     const user = req.user;
+//     const user_id = user?._id;
+//     const institute_id = user?.institute_id;
+//     const uid = user?.uid;
+
+//     if (!user_id || !institute_id || !type || !meals?.length) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "user_id, institute_id, type and meals Required",
+//       });
+//     }
+
+//     const totalCost = meals
+//       .filter((m) => m.is_on === true)
+//       .reduce((sum, m) => sum + (Number(m.package_price) || 0), 0);
+
+//     if (totalCost > 0) {
+//       const currentUser =
+//         await InstituteRegistration.findById(user_id).select("balance");
+
+//       if (!currentUser || (currentUser.balance ?? 0) < totalCost) {
+//         return res.status(400).json({
+//           success: false,
+//           message: `Insufficient balance. Required: ${totalCost}, Available: ${currentUser?.balance ?? 0}`,
+//         });
+//       }
+//     }
+
+//     const mealOnOffDoc = await Institutemealonofftime.findOne({ institute_id });
+//     const meal_on_off_time = mealOnOffDoc?.meal_on_off_time ?? 6;
+
+//     const existingDoc = await UserAllWiseMeal.findOne({
+//       user_id,
+//       institute_id,
+//       type,
+//       routine_type,
+//       uid,
+//     });
+
+//     // ── Current time ──
+//     const now = new Date();
+//     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+//     const dayNames = [
+//       "Sunday",
+//       "Monday",
+//       "Tuesday",
+//       "Wednesday",
+//       "Thursday",
+//       "Friday",
+//       "Saturday",
+//     ];
+//     const todayDayName = dayNames[now.getDay()];
+
+//     // ── DayWise conflict check ──
+//     const incomingDays = meals.map((m) => m.day).filter(Boolean);
+
+//     const existingDayWiseMeal = await UserDayWiseMeal.findOne({
+//       user_id,
+//       institute_id,
+//       "meals.day": { $in: incomingDays },
+//     });
+
+//     if (existingDayWiseMeal) {
+//       // ✅ is_on: true হলেই conflict candidate
+//       const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
+//         (m) => incomingDays.includes(m.day) && m.is_on === true,
+//       );
+
+//       const realConflictDays = [];
+//       const timeLockedDays = [];
+
+//       for (const dwMeal of conflictingDayWiseMeals) {
+//         const isToday = dwMeal.day === todayDayName;
+
+//         if (isToday) {
+//           // ✅ আজকের জন্য on/off time check
+//           const { zone } = checkMealTimeStatus(
+//             dwMeal.start_time,
+//             dwMeal.end_time,
+//             meal_on_off_time,
+//             currentMinutes,
+//           );
+
+//           if (zone === "time_over" || zone === "meal_over") {
+//             // on/off time পার হয়ে গেছে → real conflict না
+//             timeLockedDays.push(dwMeal.day);
+//           } else {
+//             realConflictDays.push(dwMeal.day);
+//           }
+//         } else {
+//           realConflictDays.push(dwMeal.day);
+//         }
+//       }
+
+//       const uniqueRealConflicts = [...new Set(realConflictDays)];
+//       const uniqueTimeLocked = [...new Set(timeLockedDays)];
+
+//       if (uniqueRealConflicts.length > 0) {
+//         return res.status(409).json({
+//           success: false,
+//           message: `These days already have meals in DayWise: ${uniqueRealConflicts.join(", ")}`,
+//           conflict_days: uniqueRealConflicts,
+//           ...(uniqueTimeLocked.length && {
+//             time_locked_days: uniqueTimeLocked,
+//             time_locked_note:
+//               "These days' on/off time is already over, no conflict applied",
+//           }),
+//         });
+//       }
+//     }
+
+//     const validMeals = [];
+//     const errors = [];
+//     const mealStatuses = [];
+
+//     for (const incomingMeal of meals) {
+//       const { day, meal_type, is_on } = incomingMeal;
+
+//       const dbMeal = existingDoc?.meals?.find(
+//         (m) => m.day === day && m.meal_type === meal_type,
+//       );
+
+//       const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
+//       const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
+
+//       const isOnChanging = dbMeal
+//         ? is_on !== undefined && is_on !== dbMeal.is_on
+//         : is_on === true;
+
+//       const isToday = day === todayDayName;
+
+//       if (isOnChanging && isToday) {
+//         const { zone, startMinutes } = checkMealTimeStatus(
+//           start_time,
+//           end_time,
+//           meal_on_off_time,
+//           currentMinutes,
+//         );
+
+//         if (zone === "meal_over") {
+//           errors.push({
+//             day,
+//             meal_type,
+//             start_time,
+//             end_time,
+//             status: "meal_over",
+//             message: `${meal_type} is already over (ended at ${end_time})`,
+//           });
+//           mealStatuses.push({
+//             day,
+//             meal_type,
+//             start_time,
+//             end_time,
+//             status: "meal_over",
+//             message: `${meal_type} already over (ended at ${end_time})`,
+//           });
+//           validMeals.push({
+//             ...incomingMeal,
+//             is_on: dbMeal ? dbMeal.is_on : false,
+//             balance_deducted: dbMeal?.balance_deducted ?? false,
+//           });
+//           continue;
+//         }
+
+//         if (zone === "time_over") {
+//           errors.push({
+//             day,
+//             meal_type,
+//             start_time,
+//             end_time,
+//             status: "time_over",
+//             message: `${meal_type} (${start_time}) on/off time is over. Cutoff was ${meal_on_off_time} hour(s) before start`,
+//           });
+//           mealStatuses.push({
+//             day,
+//             meal_type,
+//             start_time,
+//             end_time,
+//             status: "time_over",
+//             message: `${meal_type} on/off is locked after ${formatCutoff(startMinutes, meal_on_off_time)}`,
+//           });
+//           validMeals.push({
+//             ...incomingMeal,
+//             is_on: dbMeal ? dbMeal.is_on : false,
+//             balance_deducted: dbMeal?.balance_deducted ?? false,
+//           });
+//           continue;
+//         }
+//       }
+
+//       // ── Valid meal ──
+//       validMeals.push({
+//         ...incomingMeal,
+//         balance_deducted: false,
+//       });
+//       mealStatuses.push({
+//         day,
+//         meal_type,
+//         start_time,
+//         end_time,
+//         status: dbMeal ? "updated" : "new",
+//         message: dbMeal
+//           ? `${meal_type} updated successfully`
+//           : `${meal_type} added successfully`,
+//       });
+//     }
+
+//     const updatedMeal = await UserAllWiseMeal.findOneAndUpdate(
+//       { user_id, institute_id, type, routine_type, uid },
+//       { $set: { meals: validMeals } },
+//       { returnDocument: "after", upsert: true },
+//     );
+
+//     // ── meals status merge ──
+//     const mealsWithStatus = updatedMeal.meals.map((meal) => {
+//       const statusInfo = mealStatuses.find(
+//         (s) => s.day === meal.day && s.meal_type === meal.meal_type,
+//       );
+//       return {
+//         ...meal.toObject(),
+//         status: statusInfo?.status ?? "updated",
+//         status_message:
+//           statusInfo?.message ?? `${meal.meal_type} updated successfully`,
+//       };
+//     });
+
+//     const timeOverMeals = errors
+//       .map((e) => `${e.meal_type} (${e.start_time})`)
+//       .join(", ");
+
+//     const responseMessage = errors.length
+//       ? `${timeOverMeals} on/off time is over`
+//       : "Meals updated successfully";
+
+//     return res.status(200).json({
+//       success: true,
+//       message: responseMessage,
+//       data: {
+//         ...updatedMeal.toObject(),
+//         meals: mealsWithStatus,
+//       },
+//       ...(errors.length && { errors }),
+//     });
+//   } catch (err) {
+//     res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
+ function getBDNow() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utcMs + 6 * 60 * 60000);
+}
+
+function getBDDateString(bdNow) {
+  const y = bdNow.getFullYear();
+  const m = String(bdNow.getMonth() + 1).padStart(2, "0");
+  const d = String(bdNow.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const allwiseCreateUserMeal = async (req, res) => {
   try {
     const { type, meals, routine_type } = req.body;
@@ -57,8 +325,8 @@ const allwiseCreateUserMeal = async (req, res) => {
       uid,
     });
 
-    // ── Current time ──
-    const now = new Date();
+    // ── Current time (BD) ──
+    const now = getBDNow();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const dayNames = [
       "Sunday",
@@ -70,6 +338,7 @@ const allwiseCreateUserMeal = async (req, res) => {
       "Saturday",
     ];
     const todayDayName = dayNames[now.getDay()];
+    const todayDateStr = getBDDateString(now); // ⬅️ নতুন
 
     // ── DayWise conflict check ──
     const incomingDays = meals.map((m) => m.day).filter(Boolean);
@@ -81,7 +350,6 @@ const allwiseCreateUserMeal = async (req, res) => {
     });
 
     if (existingDayWiseMeal) {
-      // ✅ is_on: true হলেই conflict candidate
       const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
         (m) => incomingDays.includes(m.day) && m.is_on === true,
       );
@@ -93,7 +361,6 @@ const allwiseCreateUserMeal = async (req, res) => {
         const isToday = dwMeal.day === todayDayName;
 
         if (isToday) {
-          // ✅ আজকের জন্য on/off time check
           const { zone } = checkMealTimeStatus(
             dwMeal.start_time,
             dwMeal.end_time,
@@ -102,7 +369,6 @@ const allwiseCreateUserMeal = async (req, res) => {
           );
 
           if (zone === "time_over" || zone === "meal_over") {
-            // on/off time পার হয়ে গেছে → real conflict না
             timeLockedDays.push(dwMeal.day);
           } else {
             realConflictDays.push(dwMeal.day);
@@ -132,6 +398,9 @@ const allwiseCreateUserMeal = async (req, res) => {
     const validMeals = [];
     const errors = [];
     const mealStatuses = [];
+    let totalDeduct = 0;
+    let totalInstituteDelta = 0;
+    const balanceOps = [];
 
     for (const incomingMeal of meals) {
       const { day, meal_type, is_on } = incomingMeal;
@@ -142,6 +411,8 @@ const allwiseCreateUserMeal = async (req, res) => {
 
       const start_time = dbMeal ? dbMeal.start_time : incomingMeal.start_time;
       const end_time = dbMeal ? dbMeal.end_time : incomingMeal.end_time;
+      const package_price =
+        dbMeal?.package_price ?? incomingMeal.package_price ?? 0;
 
       const isOnChanging = dbMeal
         ? is_on !== undefined && is_on !== dbMeal.is_on
@@ -178,6 +449,8 @@ const allwiseCreateUserMeal = async (req, res) => {
             ...incomingMeal,
             is_on: dbMeal ? dbMeal.is_on : false,
             balance_deducted: dbMeal?.balance_deducted ?? false,
+            last_deducted_date: dbMeal?.last_deducted_date ?? null,
+            deduction_history: dbMeal?.deduction_history ?? [], 
           });
           continue;
         }
@@ -203,15 +476,36 @@ const allwiseCreateUserMeal = async (req, res) => {
             ...incomingMeal,
             is_on: dbMeal ? dbMeal.is_on : false,
             balance_deducted: dbMeal?.balance_deducted ?? false,
+            last_deducted_date: dbMeal?.last_deducted_date ?? null,
+            deduction_history: dbMeal?.deduction_history ?? [],
           });
           continue;
         }
       }
 
-      // ── Valid meal ──
+      // ─── Balance logic (cron-based, date-tracked) ───────────────────────
+      const wasOn = dbMeal?.is_on ?? false;
+      const wasDeductedToday = dbMeal?.last_deducted_date === todayDateStr;
+      let balance_deducted = dbMeal?.balance_deducted ?? false;
+      let last_deducted_date = dbMeal?.last_deducted_date ?? null;
+
+      if (is_on === true && !wasOn) {
+        // ⛔ এখনই কাটবো না — cron নিজে থেকে meal_on_off_time অনুযায়ী কাটবে
+        balance_deducted = false;
+      } else if (is_on === false && wasOn && wasDeductedToday) {
+        // আজকেই কাটা হয়েছিল — এখন OFF করছে, রিফান্ড দিতে হবে
+        totalDeduct -= package_price;
+        totalInstituteDelta -= package_price;
+        balance_deducted = false;
+        last_deducted_date = null;
+        balanceOps.push({ day, meal_type, op: "refund", amount: package_price });
+      }
+
       validMeals.push({
         ...incomingMeal,
-        balance_deducted: false,
+        balance_deducted,
+        last_deducted_date,
+        deduction_history: dbMeal?.deduction_history ?? [],
       });
       mealStatuses.push({
         day,
@@ -225,13 +519,29 @@ const allwiseCreateUserMeal = async (req, res) => {
       });
     }
 
+    // ─── Atomic balance update (শুধু refund কেসে) ────────────────────────
+    if (totalDeduct !== 0) {
+      await InstituteRegistration.findByIdAndUpdate(
+        user_id,
+        { $inc: { balance: -totalDeduct } },
+        { new: true },
+      );
+    }
+
+    if (totalInstituteDelta !== 0) {
+      await InstituteRegistration.findByIdAndUpdate(
+        institute_id,
+        { $inc: { balance: totalInstituteDelta } },
+        { new: true },
+      );
+    }
+
     const updatedMeal = await UserAllWiseMeal.findOneAndUpdate(
       { user_id, institute_id, type, routine_type, uid },
       { $set: { meals: validMeals } },
       { returnDocument: "after", upsert: true },
     );
 
-    // ── meals status merge ──
     const mealsWithStatus = updatedMeal.meals.map((meal) => {
       const statusInfo = mealStatuses.find(
         (s) => s.day === meal.day && s.meal_type === meal.meal_type,
@@ -260,6 +570,10 @@ const allwiseCreateUserMeal = async (req, res) => {
         meals: mealsWithStatus,
       },
       ...(errors.length && { errors }),
+      ...(balanceOps.length && {
+        balance_ops: balanceOps,
+        net_balance_change: -totalDeduct,
+      }),
     });
   } catch (err) {
     res.status(500).json({

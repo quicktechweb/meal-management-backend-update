@@ -214,7 +214,13 @@ const dayWiseUserCreateUserMeal = async (req, res) => {
         balanceOps.push({ day, meal_type, op: "refund", amount: package_price });
       }
 
-      validMeals.push({ ...incomingMeal, balance_deducted, last_deducted_date }); // ⬅️ last_deducted_date যোগ হয়েছে
+      // validMeals.push({ ...incomingMeal, balance_deducted, last_deducted_date }); 
+      validMeals.push({
+        ...incomingMeal,
+        balance_deducted,
+        last_deducted_date,
+        deduction_history: dbMeal?.deduction_history ?? [],   // ⬅️ এই লাইনটা যোগ করুন
+      });
       mealStatuses.push({
         day,
         meal_type,
