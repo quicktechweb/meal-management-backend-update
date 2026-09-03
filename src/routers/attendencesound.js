@@ -4,7 +4,7 @@ import Attendance from "../../models/Attendance/Attendance.js";
 
 const router = express.Router();
 
-// 📱 MOBILE ALERT FLAG — মোবাইল ডিভাইস এইটা পোল করে সাউন্ড বাজাবে
+// 📱 MOBILE ALERT FLAG —
 let mobileAlertPending = false;
 let lastMobileAlertUser = null;
 
