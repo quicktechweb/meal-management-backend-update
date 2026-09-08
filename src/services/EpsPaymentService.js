@@ -4,12 +4,12 @@ const crypto = require("crypto");
 // ================= EPS CREDENTIALS =================
 const EPS_CONFIG = {
   baseUrl: "https://pgapi.eps.com.bd/v1",
-  merchantId: "5a2f46f3-921c-4465-91c0-2c7e539040af",
-  storeId: "C4572391-F4FE-434A-828A-BBC6799DB980",
-  username: "zamshed245@gmail.com",
+  merchantId: "ac5f05eb-8fc4-4b33-9a39-e8ded9be9c8e",
+  storeId: "AF8C94D4-A8CD-406B-BD6D-B3DE9A01FE2E",
+  username: "alabadanonline@gmail.com",
   password: "Merchant@123",
-  hashKey: "FMUNISHOY2lWZEPSXTy2256EKROYMALL",
-  registeredDomain: "https://alabadanbackendpart.alabadan.com",
+  hashKey: "FMUNISHOY2lWZEPSXTyB1D39ALABADAN",
+  registeredDomain: "https://alabadan.com",
 };
 
 // ================= HASH GENERATOR (HMAC SHA512, base64) =================

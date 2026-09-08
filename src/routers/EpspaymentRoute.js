@@ -290,7 +290,7 @@ router.get("/payment/eps/success", async (req, res) => {
           <div class="row"><span class="key">Address</span><span class="val">${customerAddress}</span></div>
         </div>
         <div class="footer">
-          <a class="btn" href="https://alabadanbackendpart.alabadan.com">Continue Shopping</a>
+          <a class="btn" href="https://alabadan.com">Continue Shopping</a>
           <div class="note">A confirmation has been recorded against invoice #${invoiceId}</div>
         </div>
       </div>
@@ -437,7 +437,7 @@ router.get("/payment/eps/cancel", async (req, res) => {
           <p>পুনরায় পেমেন্ট সম্পন্ন করতে নিচের বাটনে ক্লিক করুন।</p>
         </div>
         <div class="footer">
-          <a class="btn" href="https://alabadanbackendpart.alabadan.com">আবার চেষ্টা করুন</a>
+          <a class="btn" href="https://alabadan.com">আবার চেষ্টা করুন</a>
         </div>
       </div>
     </body>
@@ -528,7 +528,7 @@ function renderFailPage(res, invoiceId, message) {
         <p>টাকা কাটা থাকলে ব্যাংক/মোবাইল ব্যাংকিং থেকে তা রিফান্ড হয়ে যাবে, অথবা আমাদের সাপোর্টে যোগাযোগ করুন।</p>
       </div>
       <div class="footer">
-        <a class="btn" href="https://alabadanbackendpart.alabadan.com">আবার চেষ্টা করুন</a>
+        <a class="btn" href="https://alabadan.com">আবার চেষ্টা করুন</a>
       </div>
     </div>
   </body>
