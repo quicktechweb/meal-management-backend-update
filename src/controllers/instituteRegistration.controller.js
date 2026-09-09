@@ -729,16 +729,58 @@ const approveInstituteUser = async (req, res) => {
   }
 };
 
-const getInsituteUserData = async (req, res) => {
+   const getInsituteUserData = async (req, res) => {
   const user = req.user;
 
   try {
+    let userObj = user.toObject();
+
+    console.log("🔍 logged-in user _id:", userObj._id);
+    console.log("🔍 logged-in user institute_id:", userObj.institute_id);
+    console.log("🔍 own information.instituteType:", userObj.information?.instituteType);
+
+    // এই ইউজারটা যদি অন্য কোনো ইনস্টিটিউটের অধীনে (member/student) থাকে,
+    // তাহলে সেই parent institute-র document থেকে institute-level তথ্য নিয়ে আসো
+    if (userObj.institute_id) {
+      const parentInstitute = await InstituteRegistration.findById(
+        userObj.institute_id
+      ).select("information email phone");
+
+      console.log("🔍 parent institute found?:", !!parentInstitute);
+      console.log("🔍 parent institute information:", parentInstitute?.information);
+
+      if (parentInstitute) {
+        userObj.information = {
+          ...userObj.information,
+          instituteType:
+            userObj.information?.instituteType ||
+            parentInstitute.information?.instituteType,
+          number_of_member:
+            userObj.information?.number_of_member ??
+            parentInstitute.information?.number_of_member,
+          country:
+            userObj.information?.country ||
+            parentInstitute.information?.country,
+          name_of_institute:
+            userObj.information?.name_of_institute ||
+            parentInstitute.information?.name_of_institute,
+          documents:
+            userObj.information?.documents?.length
+              ? userObj.information.documents
+              : parentInstitute.information?.documents || [],
+        };
+      }
+    }
+
+    console.log("✅ final information sent to frontend:", userObj.information);
+
     res.status(200).json({
       success: true,
-      user: user,
+      user: userObj,
       tokenInfo: req.tokenData,
     });
   } catch (error) {
+    console.log("❌ getInsituteUserData error:", error);
     res.status(500).json({
       success: false,
       error: "Failed to fetch user data",

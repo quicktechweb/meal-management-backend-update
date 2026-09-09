@@ -1,16 +1,17 @@
 const express = require("express");
 const EpsPaymentService = require("../services/EpsPaymentService");
-const EpsTransaction = require("../models/Epstranscation");
+const Balance = require("../models/balance.model");
+const InstituteRegistration = require("../models/instituteRegistration.model");
 
 const router = express.Router();
 
 /* ==========================================================
-   INITIATE PAYMENT
-   ফ্রন্টএন্ড থেকে POST কল করবে: order, shipping, cartItems পাঠিয়ে
+   INITIATE PAYMENT (Balance Top-up)
+   ফ্রন্টএন্ড থেকে POST কল করবে: order, shipping, userId পাঠিয়ে
    ========================================================== */
 router.post("/payment/eps/initiate", async (req, res) => {
   try {
-    const { order, shipping, cartItems } = req.body;
+    const { order, shipping, cartItems, userId } = req.body;
 
     if (!order?.invoice_id || !order?.amount) {
       return res.status(400).json({
@@ -26,12 +27,26 @@ router.post("/payment/eps/initiate", async (req, res) => {
       });
     }
 
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    // 🔹 helper: EPS-safe short unique merchant transaction id (max 30 chars)
+function generateMerchantTransactionId() {
+  const ts = Date.now().toString(36).toUpperCase();      // ~8 chars
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase(); // 6 chars
+  return `TXN${ts}${rand}`; // total ~17 chars, safely under 30
+}
+
     // 🔹 unique merchant transaction id generate করা হচ্ছে
-    const merchantTransactionId = `TXN-${order.invoice_id}-${Date.now()}`;
+  const merchantTransactionId = generateMerchantTransactionId();
 
     // 🔹 Step 1: Token নাও
     const { token, error: tokenError } = await EpsPaymentService.getToken();
-
+      console.log("🔥🔥🔥 EPS TOKEN ERROR DETAIL:", tokenError);
     if (!token) {
       return res.status(502).json({
         success: false,
@@ -51,17 +66,20 @@ router.post("/payment/eps/initiate", async (req, res) => {
     );
 
     if (!initData) {
-      // 🔹 fail হলেও DB তে log রাখো
-      await EpsTransaction.create({
+      // 🔹 fail হলেও Balance কালেকশনে log রাখো (status: failed)
+      await Balance.create({
+        user: userId,
+        added_by: userId,
+        amount: order.amount,
+        note: `EPS Payment Failed - Invoice #${order.invoice_id}`,
+        source: "eps",
+        status: "failed",
         invoiceId: order.invoice_id,
         merchantTransactionId,
-        amount: order.amount,
         customerName: shipping.name,
         customerEmail: shipping.email,
         customerPhone: shipping.phone,
         customerAddress: shipping.address,
-        cartItems: cartItems || [],
-        status: "failed",
         errorMessage: initError,
       });
 
@@ -72,19 +90,22 @@ router.post("/payment/eps/initiate", async (req, res) => {
       });
     }
 
-    // 🔹 DB তে transaction record save করো
-    await EpsTransaction.create({
+    // 🔹 Balance কালেকশনে "initiated" status দিয়ে entry রাখো
+    await Balance.create({
+      user: userId,
+      added_by: userId,
+      amount: order.amount,
+      note: `EPS Payment - Invoice #${order.invoice_id}`,
+      source: "eps",
+      status: "initiated",
       invoiceId: order.invoice_id,
       merchantTransactionId,
       epsTransactionId: initData.transaction_id,
-      amount: order.amount,
+      redirectUrl: initData.redirect_url,
       customerName: shipping.name,
       customerEmail: shipping.email,
       customerPhone: shipping.phone,
       customerAddress: shipping.address,
-      cartItems: cartItems || [],
-      redirectUrl: initData.redirect_url,
-      status: "initiated",
     });
 
     return res.status(200).json({
@@ -106,12 +127,9 @@ router.post("/payment/eps/initiate", async (req, res) => {
 /* ==========================================================
    SUCCESS CALLBACK
    EPS gateway এই URL এ redirect করবে payment success হলে
-   EPS আসলে পাঠায়: Status, MerchantTransactionId, EPSTransactionId, ErrorCode
-   (lowercase merchantTransactionId না — এটাই এতদিন বাগ ছিল)
    ========================================================== */
 router.get("/payment/eps/success", async (req, res) => {
   try {
-    // 🔹 EPS বিভিন্ন casing পাঠাতে পারে, তাই সব variant চেক করছি — safe approach
     const merchantTransactionId =
       req.query.MerchantTransactionId || req.query.merchantTransactionId;
     const epsTransactionId =
@@ -122,13 +140,13 @@ router.get("/payment/eps/success", async (req, res) => {
       return res.status(400).send("Missing transaction identifier");
     }
 
-    const transaction = await EpsTransaction.findOne(
+    const balance = await Balance.findOne(
       merchantTransactionId
         ? { merchantTransactionId }
         : { epsTransactionId }
     );
 
-    if (!transaction) {
+    if (!balance) {
       return res.status(404).send("Transaction not found");
     }
 
@@ -141,16 +159,16 @@ router.get("/payment/eps/success", async (req, res) => {
 
     const { data: verifyData, error: verifyError } = await EpsPaymentService.verifyTransaction(
       token,
-      transaction.merchantTransactionId,
-      transaction.epsTransactionId || epsTransactionId
+      balance.merchantTransactionId,
+      balance.epsTransactionId || epsTransactionId
     );
 
     if (!verifyData) {
-      transaction.status = "failed";
-      transaction.errorMessage = verifyError;
-      await transaction.save();
+      balance.status = "failed";
+      balance.errorMessage = verifyError;
+      await balance.save();
 
-      return renderFailPage(res, transaction.invoiceId, "আমরা আপনার পেমেন্ট ভেরিফাই করতে পারিনি।");
+      return renderFailPage(res, balance.invoiceId, "আমরা আপনার পেমেন্ট ভেরিফাই করতে পারিনি।");
     }
 
     // 🔹 EPS verify response অনুযায়ী success check করো
@@ -160,28 +178,37 @@ router.get("/payment/eps/success", async (req, res) => {
       verifyData?.Status === "Success" ||
       gatewayStatus === "Success";
 
-    transaction.verificationResponse = verifyData;
-    transaction.status = isSuccess ? "success" : "failed";
-    if (epsTransactionId && !transaction.epsTransactionId) {
-      transaction.epsTransactionId = epsTransactionId;
+    balance.verificationResponse = verifyData;
+    if (epsTransactionId && !balance.epsTransactionId) {
+      balance.epsTransactionId = epsTransactionId;
     }
-    await transaction.save();
 
     if (!isSuccess) {
-      return renderFailPage(res, transaction.invoiceId, "আপনার পেমেন্টটি সম্পন্ন হয়নি।");
+      balance.status = "failed";
+      await balance.save();
+      return renderFailPage(res, balance.invoiceId, "আপনার পেমেন্টটি সম্পন্ন হয়নি।");
     }
 
-    // ✅ Payment successful — order status "paid" করার লজিক এখানে বসাও
-    // await Order.findOneAndUpdate({ invoice_id: transaction.invoiceId }, { paymentStatus: "paid" });
+    // ✅ Payment successful — idempotency guard: আগে থেকে success না হলে তবেই balance বাড়াও
+    if (balance.status !== "success") {
+      balance.status = "success";
+      await balance.save();
 
-    const invoiceId = transaction.invoiceId;
-    const trxId = transaction.merchantTransactionId;
-    const epsTrxId = transaction.epsTransactionId || "N/A";
-    const amount = transaction.amount;
-    const customerName = transaction.customerName || "N/A";
-    const customerPhone = transaction.customerPhone || "N/A";
-    const customerEmail = transaction.customerEmail || "N/A";
-    const customerAddress = transaction.customerAddress || "N/A";
+      await InstituteRegistration.findByIdAndUpdate(balance.user, {
+        $inc: { balance: balance.amount },
+      });
+    } else {
+      await balance.save();
+    }
+
+    const invoiceId = balance.invoiceId;
+    const trxId = balance.merchantTransactionId;
+    const epsTrxId = balance.epsTransactionId || "N/A";
+    const amount = balance.amount;
+    const customerName = balance.customerName || "N/A";
+    const customerPhone = balance.customerPhone || "N/A";
+    const customerEmail = balance.customerEmail || "N/A";
+    const customerAddress = balance.customerAddress || "N/A";
     const paidAt = new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" });
 
     const html = `
@@ -190,7 +217,7 @@ router.get("/payment/eps/success", async (req, res) => {
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Payment Successful | KroyMall</title>
+      <title>Payment Successful | Alabadan</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body {
@@ -271,7 +298,7 @@ router.get("/payment/eps/success", async (req, res) => {
         <div class="header">
           <div class="icon">✔</div>
           <h1>Payment Successful</h1>
-          <p>Thank you for your purchase from KroyMall</p>
+          <p>Thank you for your purchase from Alabadan</p>
         </div>
         <div class="body">
           <div class="amount">
@@ -318,16 +345,16 @@ router.get("/payment/eps/fail", async (req, res) => {
     let invoiceId = "N/A";
 
     if (merchantTransactionId || epsTransactionId) {
-      const transaction = await EpsTransaction.findOne(
+      const balance = await Balance.findOne(
         merchantTransactionId
           ? { merchantTransactionId }
           : { epsTransactionId }
       );
 
-      if (transaction) {
-        transaction.status = "failed";
-        await transaction.save();
-        invoiceId = transaction.invoiceId;
+      if (balance) {
+        balance.status = "failed";
+        await balance.save();
+        invoiceId = balance.invoiceId;
       }
     }
 
@@ -351,16 +378,16 @@ router.get("/payment/eps/cancel", async (req, res) => {
     let invoiceId = "N/A";
 
     if (merchantTransactionId || epsTransactionId) {
-      const transaction = await EpsTransaction.findOne(
+      const balance = await Balance.findOne(
         merchantTransactionId
           ? { merchantTransactionId }
           : { epsTransactionId }
       );
 
-      if (transaction) {
-        transaction.status = "cancelled";
-        await transaction.save();
-        invoiceId = transaction.invoiceId;
+      if (balance) {
+        balance.status = "cancelled";
+        await balance.save();
+        invoiceId = balance.invoiceId;
       }
     }
 
@@ -370,7 +397,7 @@ router.get("/payment/eps/cancel", async (req, res) => {
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Payment Cancelled | KroyMall</title>
+      <title>Payment Cancelled | Alabadan</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
         body {
@@ -461,7 +488,7 @@ function renderFailPage(res, invoiceId, message) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Payment Failed | KroyMall</title>
+    <title>Payment Failed | Alabadan</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
       body {

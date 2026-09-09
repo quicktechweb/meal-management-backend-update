@@ -182,7 +182,7 @@ router.get("/all-part-balance-list", async (req, res) => {
   try {
     const { email, userId } = req.query; // ?email=naymur407@gmail.com বা ?userId=69e84df0...
 
-    const balanceData = await Balance.find({})
+        const balanceData = await Balance.find({ status: "success" })
       .populate("user", "name email")
       .populate("added_by", "name email");
 
