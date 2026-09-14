@@ -321,20 +321,32 @@ const allwiseRoutineCreateUserMeal = async (req, res) => {
       "meals.day": { $in: incomingDays },
     });
 
-    if (existingDayWiseMeal) {
-      const conflictDays = [
-        ...new Set(
-          existingDayWiseMeal.meals
-            .filter((m) => incomingDays.includes(m.day))
-            .map((m) => m.day),
-        ),
-      ];
+       if (existingDayWiseMeal) {
+      const incomingOnPairs = meals
+        .filter((m) => m.is_on === true)
+        .map((m) => `${m.day}__${m.meal_type}`);
 
-      return res.status(409).json({
-        success: false,
-        message: `These days already have meals in DayWise: ${conflictDays.join(", ")}`,
-        conflict_days: conflictDays,
-      });
+      const conflictPairs = existingDayWiseMeal.meals.filter(
+        (m) =>
+          m.is_on === true &&
+          incomingOnPairs.includes(`${m.day}__${m.meal_type}`),
+      );
+
+      if (conflictPairs.length > 0) {
+        await UserDayWiseRoutineMeal.updateOne(
+          { _id: existingDayWiseMeal._id },
+          {
+            $pull: {
+              meals: {
+                $or: conflictPairs.map((m) => ({
+                  day: m.day,
+                  meal_type: m.meal_type,
+                })),
+              },
+            },
+          },
+        );
+      }
     }
 
     // Current time (BD)

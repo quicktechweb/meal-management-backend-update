@@ -349,13 +349,19 @@ const allwiseCreateUserMeal = async (req, res) => {
       "meals.day": { $in: incomingDays },
     });
 
-    if (existingDayWiseMeal) {
+        if (existingDayWiseMeal) {
+      const incomingOnPairs = meals
+        .filter((m) => m.is_on === true)
+        .map((m) => `${m.day}__${m.meal_type}`);
+
       const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
-        (m) => incomingDays.includes(m.day) && m.is_on === true,
+        (m) =>
+          m.is_on === true &&
+          incomingOnPairs.includes(`${m.day}__${m.meal_type}`),
       );
 
-      const realConflictDays = [];
-      const timeLockedDays = [];
+      const realConflicts = [];
+      const timeLocked = [];
 
       for (const dwMeal of conflictingDayWiseMeals) {
         const isToday = dwMeal.day === todayDayName;
@@ -369,29 +375,29 @@ const allwiseCreateUserMeal = async (req, res) => {
           );
 
           if (zone === "time_over" || zone === "meal_over") {
-            timeLockedDays.push(dwMeal.day);
+            timeLocked.push(dwMeal);
           } else {
-            realConflictDays.push(dwMeal.day);
+            realConflicts.push(dwMeal);
           }
         } else {
-          realConflictDays.push(dwMeal.day);
+          realConflicts.push(dwMeal);
         }
       }
 
-      const uniqueRealConflicts = [...new Set(realConflictDays)];
-      const uniqueTimeLocked = [...new Set(timeLockedDays)];
-
-      if (uniqueRealConflicts.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: `These days already have meals in DayWise: ${uniqueRealConflicts.join(", ")}`,
-          conflict_days: uniqueRealConflicts,
-          ...(uniqueTimeLocked.length && {
-            time_locked_days: uniqueTimeLocked,
-            time_locked_note:
-              "These days' on/off time is already over, no conflict applied",
-          }),
-        });
+      if (realConflicts.length > 0) {
+        await UserDayWiseMeal.updateOne(
+          { _id: existingDayWiseMeal._id },
+          {
+            $pull: {
+              meals: {
+                $or: realConflicts.map((m) => ({
+                  day: m.day,
+                  meal_type: m.meal_type,
+                })),
+              },
+            },
+          },
+        );
       }
     }
 
