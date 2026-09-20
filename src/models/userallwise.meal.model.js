@@ -21,6 +21,7 @@ const userAllWiseMealSchema = new mongoose.Schema(
         start_time: String,
         end_time: String,
         is_on: Boolean,
+        remember_on: { type: Boolean, default: false },
         balance_deducted: {
           type: Boolean,
           default: false,
