@@ -7,6 +7,7 @@ const router = express.Router();
 // 📱 MOBILE ALERT FLAG —
 let mobileAlertPending = false;
 let lastMobileAlertUser = null;
+let lastMobileAlertType = null; // "meal_found" | "no_meal"
 
 // 📋 DEBUG LOG — সব কিছু এখানে জমা হবে (সর্বোচ্চ ১০০টা এন্ট্রি রাখা হবে)
 const debugLog = [];
@@ -126,17 +127,25 @@ async function takeAttendanceDataFromDevice(req, res) {
         }
       }
 
-      // 3️⃣ NO MEAL FOUND -> শুধু MOBILE অ্যালার্ট সেট করা হবে (মেশিনে কোনো সাউন্ড কমান্ড পাঠানো হবে না)
+      // 3️⃣ MOBILE ALERT সেট করা হবে — meal থাকলে GREEN + sound, না থাকলে RED + sound
       if (!mealMatched) {
         console.log(`🔇 No meal -> mobile alert set for User ${user_id}`);
         addLog("NO_MEAL_FOUND", { user_id });
 
-        // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে সাউন্ড বাজাবে
+        // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে RED সাউন্ড বাজাবে
         mobileAlertPending = true;
         lastMobileAlertUser = user_id;
-        addLog("MOBILE_ALERT_SET", { user_id });
+        lastMobileAlertType = "no_meal";
+        addLog("MOBILE_ALERT_SET", { user_id, type: "no_meal" });
       } else {
+        console.log(`✅ Meal found -> mobile alert set for User ${user_id}`);
         addLog("MEAL_FOUND", { user_id });
+
+        // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে GREEN সাউন্ড বাজাবে
+        mobileAlertPending = true;
+        lastMobileAlertUser = user_id;
+        lastMobileAlertType = "meal_found";
+        addLog("MOBILE_ALERT_SET", { user_id, type: "meal_found" });
       }
 
     } catch (err) {
@@ -152,8 +161,9 @@ router.get("/mobile-check", (req, res) => {
   if (mobileAlertPending) {
     mobileAlertPending = false; // একবার পড়লেই রিসেট হয়ে যাবে
     const userId = lastMobileAlertUser;
-    addLog("MOBILE_ALERT_DELIVERED", { user_id: userId });
-    return res.json({ alert: true, user_id: userId });
+    const type = lastMobileAlertType;
+    addLog("MOBILE_ALERT_DELIVERED", { user_id: userId, type });
+    return res.json({ alert: true, user_id: userId, type });
   }
   return res.json({ alert: false });
 });
@@ -183,7 +193,8 @@ router.get("/mobile-alert", (req, res) => {
     padding: 24px;
     transition: background 0.3s ease;
   }
-  body.alerting { background: #7a1f1f; }
+  body.alerting-red { background: #7a1f1f; }
+  body.alerting-green { background: #1f7a2e; }
 
   h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
   p.sub { font-size: 14px; color: #999; margin-bottom: 32px; }
@@ -236,7 +247,7 @@ router.get("/mobile-alert", (req, res) => {
   <div id="running" style="display:none">
     <div class="status-dot" id="dot"></div>
     <h1>মনিটরিং চলছে</h1>
-    <p class="sub">মেশিনে fingerprint দিলে, meal না থাকলে এখানে সাউন্ড বাজবে</p>
+    <p class="sub">মেশিনে fingerprint দিলে — meal থাকলে সবুজ, না থাকলে লাল সাউন্ড বাজবে</p>
     <div id="lastEvent">এখনো কোনো অ্যালার্ট আসেনি</div>
   </div>
 
@@ -258,21 +269,42 @@ router.get("/mobile-alert", (req, res) => {
     osc.stop(audioCtx.currentTime + 0.05);
   }
 
-  function playBeep(durationSec = 2) {
+  // type: "meal_found" (green, pleasant double-beep) | "no_meal" (red, harsh beep)
+  function playBeep(type) {
     if (!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = "square";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.5;
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + durationSec);
 
-    document.getElementById("body").classList.add("alerting");
-    setTimeout(() => {
-      document.getElementById("body").classList.remove("alerting");
-    }, durationSec * 1000);
+    const body = document.getElementById("body");
+
+    if (type === "meal_found") {
+      // ✅ সুন্দর দুটো টোন (উপরে উঠে)
+      [660, 880].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.value = 0.5;
+        osc.connect(gain).connect(audioCtx.destination);
+        const startAt = audioCtx.currentTime + i * 0.18;
+        osc.start(startAt);
+        osc.stop(startAt + 0.18);
+      });
+
+      body.classList.add("alerting-green");
+      setTimeout(() => body.classList.remove("alerting-green"), 1200);
+    } else {
+      // 🔇 কড়া alert সাউন্ড
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.5;
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 2);
+
+      body.classList.add("alerting-red");
+      setTimeout(() => body.classList.remove("alerting-red"), 2000);
+    }
   }
 
   async function pollServer() {
@@ -281,9 +313,10 @@ router.get("/mobile-alert", (req, res) => {
       const data = await res.json();
 
       if (data.alert) {
-        playBeep(2);
+        playBeep(data.type);
+        const label = data.type === "meal_found" ? "✅ Meal Found" : "🔇 No Meal";
         document.getElementById("lastEvent").textContent =
-          \`শেষ অ্যালার্ট: User \${data.user_id} — \${new Date().toLocaleTimeString("bn-BD")}\`;
+          \`শেষ অ্যালার্ট: User \${data.user_id} — \${label} — \${new Date().toLocaleTimeString("bn-BD")}\`;
       }
     } catch (err) {
       document.getElementById("dot").classList.add("off");
