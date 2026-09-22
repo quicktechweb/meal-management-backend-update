@@ -180,7 +180,7 @@ app.use("/api/submaterial", materialRoutes);
 app.use("/api", epsPaymentRoutes);
 app.use("/api/allmetrialproductadd", allmaterialproduct);
 app.use("/api", mealDeductionRoute);
-app.use("/api/sound", attendencesound);
+app.use("/iclock", attendencesound);
 
 // firebase authffff
 app.use("/api/firebaseAuth", firebaseauthRoute);
