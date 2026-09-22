@@ -1,4 +1,4 @@
-import Attendance from "../../models/Attendance.js";
+import Attendance from "../../models/Attendance/Attendance.js";
 import moment from "moment";
 
 export const takeAttendanceDataFromDevice = async (req, res) => {

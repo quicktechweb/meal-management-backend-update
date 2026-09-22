@@ -16,6 +16,7 @@ const userDayWiseMealSchema = new mongoose.Schema(
     meals: [
       {
         day: String,
+        date: { type: String, default: null }, // "YYYY-MM-DD" — শুধু এই তারিখের জন্য override
         meal_type: String,
         package_price: Number,
         start_time: String,

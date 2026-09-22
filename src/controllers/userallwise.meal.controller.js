@@ -340,67 +340,7 @@ const allwiseCreateUserMeal = async (req, res) => {
     const todayDayName = dayNames[now.getDay()];
     const todayDateStr = getBDDateString(now); // ⬅️ নতুন
 
-    // ── DayWise conflict check ──
-    const incomingDays = meals.map((m) => m.day).filter(Boolean);
-
-    const existingDayWiseMeal = await UserDayWiseMeal.findOne({
-      user_id,
-      institute_id,
-      "meals.day": { $in: incomingDays },
-    });
-
-        if (existingDayWiseMeal) {
-      const incomingOnPairs = meals
-        .filter((m) => m.is_on === true)
-        .map((m) => `${m.day}__${m.meal_type}`);
-
-      const conflictingDayWiseMeals = existingDayWiseMeal.meals.filter(
-        (m) =>
-          m.is_on === true &&
-          incomingOnPairs.includes(`${m.day}__${m.meal_type}`),
-      );
-
-      const realConflicts = [];
-      const timeLocked = [];
-
-      for (const dwMeal of conflictingDayWiseMeals) {
-        const isToday = dwMeal.day === todayDayName;
-
-        if (isToday) {
-          const { zone } = checkMealTimeStatus(
-            dwMeal.start_time,
-            dwMeal.end_time,
-            meal_on_off_time,
-            currentMinutes,
-          );
-
-          if (zone === "time_over" || zone === "meal_over") {
-            timeLocked.push(dwMeal);
-          } else {
-            realConflicts.push(dwMeal);
-          }
-        } else {
-          realConflicts.push(dwMeal);
-        }
-      }
-
-      if (realConflicts.length > 0) {
-        await UserDayWiseMeal.updateOne(
-          { _id: existingDayWiseMeal._id },
-          {
-            $pull: {
-              meals: {
-                $or: realConflicts.map((m) => ({
-                  day: m.day,
-                  meal_type: m.meal_type,
-                })),
-              },
-            },
-          },
-        );
-      }
-    }
-
+    // DayWise এখন শুধু নির্দিষ্ট তারিখের override — All আপডেটে override মোছা হয় না
     const validMeals = [];
     const errors = [];
     const mealStatuses = [];

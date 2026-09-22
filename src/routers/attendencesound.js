@@ -1,6 +1,6 @@
-import express from "express";
-import axios from "axios";
-import Attendance from "../../models/Attendance/Attendance.js";
+const express = require("express");
+const axios = require("axios");
+const Attendance = require("../../src/models/Attendance");
 
 const router = express.Router();
 
@@ -373,4 +373,4 @@ router.get("/debug", (req, res) => {
 router.all("/cdata", takeAttendanceDataFromDevice);
 router.all("/getrequest", getRequestHandler);
 
-export default router;
+module.exports = router;

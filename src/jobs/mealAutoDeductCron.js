@@ -5,6 +5,7 @@ const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 const InstituteRegistration = require("../models/instituteRegistration.model");
 const Institutemealonofftime = require("../models/institutemealonoff.model");
 const { deductMaterialsForMeal } = require("../services/materialDeduction.service");
+const { recordMealDeduction } = require("../services/mealLedger.service");
 
 const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const CUTOFF_HOURS = 1; // ⏰ meal শুরুর ১ ঘণ্টা আগে কাটবে (hardcoded)
@@ -56,7 +57,7 @@ async function processDueMealDeductions() {
   // ⚠️ balance_deducted দিয়ে filter করা হচ্ছে না — কারণ সেটা আর "আজকে কাটা হয়েছে কিনা" বোঝায় না।
   // last_deducted_date দিয়ে ইনকোড/স্কিপ লজিক নিচে হ্যান্ডেল করা হচ্ছে।
   const docs = await UserDayWiseMeal.find({
-    "meals.day": todayDayName,
+    "meals.date": todayDateStr,
     "meals.is_on": true,
   });
 
@@ -66,7 +67,8 @@ async function processDueMealDeductions() {
     let docChanged = false;
 
     for (const meal of doc.meals) {
-      if (meal.day !== todayDayName || !meal.is_on) continue;
+      // Day Wise এখন তারিখ ভিত্তিক — শুধু আজকের তারিখের override
+      if (meal.date !== todayDateStr || !meal.is_on) continue;
 
       // ✅ আজকে ইতিমধ্যে কাটা হয়ে গেছে? তাহলে স্কিপ — ডাবল-ডিডাকশন প্রটেকশন
       if (meal.last_deducted_date === todayDateStr) continue;
@@ -110,11 +112,26 @@ async function processDueMealDeductions() {
             { $inc: { balance: -amount } },
             { session },
           );
-          await InstituteRegistration.findByIdAndUpdate(
+          const instituteAfter = await InstituteRegistration.findByIdAndUpdate(
             doc.institute_id,
             { $inc: { balance: +amount } },
-            { session },
+            { session, new: true },
           );
+
+          // 🧾 Ledger entry — institute panel / super admin / user history এর জন্য
+          // (একই transaction, তাই টাকা কাটা আর ledger একসাথে save হবে নাহলে কোনোটাই না)
+          await recordMealDeduction({
+            session,
+            source: "day_wise",
+            userDoc,
+            instituteDoc: instituteAfter,
+            instituteId: doc.institute_id,
+            meal,
+            amount,
+            dateStr: todayDateStr,
+            dayName: todayDayName,
+            startMinutes,
+          });
 
           // ✅ MOVED: material deduction commit-er age, same transaction e
           const matResults = await deductMaterialsForMeal(meal, session);

@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const UserDayWiseRoutineMeal = require("../models/userdaywiseroutine.meal.model");
 const InstituteRegistration = require("../models/instituteRegistration.model");
 const { deductMaterialsForMeal } = require("../services/materialDeduction.service");
+const { recordMealDeduction } = require("../services/mealLedger.service");
 
 const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const CUTOFF_HOURS = 1; // ⏰ meal শুরুর ১ ঘণ্টা আগে কাটবে
@@ -103,11 +104,26 @@ async function processDueRoutineMealDeductions() {
             { $inc: { balance: -amount } },
             { session },
           );
-          await InstituteRegistration.findByIdAndUpdate(
+          const instituteAfter = await InstituteRegistration.findByIdAndUpdate(
             doc.institute_id,
             { $inc: { balance: +amount } },
-            { session },
+            { session, new: true },
           );
+
+          // 🧾 Ledger entry — institute panel / super admin / user history এর জন্য
+          // (একই transaction, তাই টাকা কাটা আর ledger একসাথে save হবে নাহলে কোনোটাই না)
+          await recordMealDeduction({
+            session,
+            source: "routine_day_wise",
+            userDoc,
+            instituteDoc: instituteAfter,
+            instituteId: doc.institute_id,
+            meal,
+            amount,
+            dateStr: todayDateStr,
+            dayName: todayDayName,
+            startMinutes,
+          });
 
           // ✅ MOVED: material deduction commit-er age, same transaction e
           const matResults = await deductMaterialsForMeal(meal, session);

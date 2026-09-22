@@ -2,8 +2,10 @@
 const cron = require("node-cron");
 const mongoose = require("mongoose");
 const UserAllWiseMeal = require("../models/userallwise.meal.model");
+const UserDayWiseMeal = require("../models/userdaywise.meal.model");
 const InstituteRegistration = require("../models/instituteRegistration.model");
 const { deductMaterialsForMeal } = require("../services/materialDeduction.service");
+const { recordMealDeduction } = require("../services/mealLedger.service");
 const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const CUTOFF_HOURS = 1; // ⏰ meal শুরুর ১ ঘণ্টা আগে কাটবে
 
@@ -56,12 +58,27 @@ async function processDueAllWiseMealDeductions() {
 
   console.log(`[ALLWISE-CRON] Found ${docs.length} document(s) with active meals today`);
 
+  // আজকের তারিখে Day Wise override আছে এমন (user + meal_type) — এগুলো All cron কাটবে না
+  const overrideDocs = await UserDayWiseMeal.find(
+    { "meals.date": todayDateStr },
+    { user_id: 1, "meals.date": 1, "meals.meal_type": 1 },
+  );
+  const overrideSet = new Set();
+  overrideDocs.forEach((d) => {
+    d.meals.forEach((m) => {
+      if (m.date === todayDateStr) overrideSet.add(`${d.user_id}__${m.meal_type}`);
+    });
+  });
+
   for (const doc of docs) {
     let docChanged = false;
 
     for (const meal of doc.meals) {
       if (meal.day !== todayDayName || !meal.is_on) continue;
       if (meal.last_deducted_date === todayDateStr) continue; // আজকে already কাটা হয়ে গেছে
+
+      // আজকের জন্য Day Wise override থাকলে (ON বা OFF) All এর হিসাব বাদ
+      if (overrideSet.has(`${doc.user_id}__${meal.meal_type}`)) continue;
 
       // ✅ CHANGED: ekhon meal_type onujayi corrected start time use hocche
       const startMinutes = getCorrectedStartMinutes(meal.start_time, meal.meal_type);
@@ -102,11 +119,26 @@ async function processDueAllWiseMealDeductions() {
             { $inc: { balance: -amount } },
             { session },
           );
-          await InstituteRegistration.findByIdAndUpdate(
+          const instituteAfter = await InstituteRegistration.findByIdAndUpdate(
             doc.institute_id,
             { $inc: { balance: +amount } },
-            { session },
+            { session, new: true },
           );
+
+          // 🧾 Ledger entry — institute panel / super admin / user history এর জন্য
+          // (একই transaction, তাই টাকা কাটা আর ledger একসাথে save হবে নাহলে কোনোটাই না)
+          await recordMealDeduction({
+            session,
+            source: "all_wise",
+            userDoc,
+            instituteDoc: instituteAfter,
+            instituteId: doc.institute_id,
+            meal,
+            amount,
+            dateStr: todayDateStr,
+            dayName: todayDayName,
+            startMinutes,
+          });
 
           // ✅ MOVED: material deduction commit-er age, same transaction e
           const matResults = await deductMaterialsForMeal(meal, session);

@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
- 
+const mongoose = require("mongoose");
+
 const attendanceSchema = new mongoose.Schema({
     user_id:   { type: Number, required: true },
     timestamp: { type: Date,   required: true },
@@ -14,7 +14,7 @@ const attendanceSchema = new mongoose.Schema({
     verify_mode: { type: Number },
 
 }, { timestamps: true });
- 
+
 const Attendance = mongoose.model("Attendance", attendanceSchema);
 
-export default Attendance;
+module.exports = Attendance;

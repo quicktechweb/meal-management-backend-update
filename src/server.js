@@ -72,8 +72,10 @@ const permissionsRoute = require("./routers/permission.router");
 const inventoryProductRoute = require("./routers/inventoryProduct.router");
 
 const sellerRoute = require("./routers/seller.router");
+const attendencesound = require("./routers/attendencesound");
 
 const buyerRoute = require("./routers/buyer.router");
+const mealDeductionRoute = require("./routers/mealDeduction.router");
 
 const InventoryPurchaseProductRoute = require("./routers/inventory.purchaseproduct.router");
 
@@ -177,6 +179,8 @@ app.use("/api/feedback", feedbackroute);
 app.use("/api/submaterial", materialRoutes);
 app.use("/api", epsPaymentRoutes);
 app.use("/api/allmetrialproductadd", allmaterialproduct);
+app.use("/api", mealDeductionRoute);
+app.use("/api/sound", attendencesound);
 
 // firebase authffff
 app.use("/api/firebaseAuth", firebaseauthRoute);
