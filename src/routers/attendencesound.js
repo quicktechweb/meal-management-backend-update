@@ -90,7 +90,7 @@ async function takeAttendanceDataFromDevice(req, res) {
 
       // 2️⃣ GET MEAL DATA
       const mealRes = await axios.get(
-        `https://meal-management-backend-update-3.onrender.com/api/allwise-user-meals/${user_id}`
+        `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`
       );
 
       const rawData = mealRes.data?.data;
@@ -114,7 +114,7 @@ async function takeAttendanceDataFromDevice(req, res) {
             mealMatched = true;
             try {
               await axios.patch(
-                `https://meal-management-backend-update-3.onrender.com/api/allwise-user-meal-update/${meal._id}`,
+                `https://alabadanbackendpart.alabadan.com/api/allwise-user-meal-update/${meal._id}`,
                 { is_attendance: true }
               );
               console.log(`✅ Meal Updated -> User ${user_id} | ${meal.meal_type}`);

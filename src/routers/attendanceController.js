@@ -204,7 +204,7 @@ router.all("/cdata", async (req, res) => {
 
       try {
         const mealRes = await axios.get(
-          `https://meal-management-backend-update-3.onrender.com/api/allwise-user-meals/${user_id}`
+          `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`
         );
         const rawData = mealRes.data?.data;
         userMeals = rawData ? (Array.isArray(rawData) ? rawData : [rawData]) : [];
@@ -245,7 +245,7 @@ router.all("/cdata", async (req, res) => {
             mealMatched = true;
             try {
               await axios.patch(
-                `https://meal-management-backend-update-3.onrender.com/api/allwise-user-meal-update/${meal._id}`,
+                `https://alabadanbackendpart.alabadan.com/api/allwise-user-meal-update/${meal._id}`,
                 { is_attendance: true }
               );
               debugLog.push({ time: new Date().toISOString(), event: "meal_updated", user_id });
