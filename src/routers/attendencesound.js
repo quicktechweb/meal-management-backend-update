@@ -7,6 +7,7 @@ const router = express.Router();
 // 📱 MOBILE ALERT FLAG —
 let mobileAlertPending = false;
 let lastMobileAlertUser = null;
+let lastMobileAlertName = null;
 let lastMobileAlertType = null; // "meal_found" | "no_meal"
 
 // 📋 DEBUG LOG — সব কিছু এখানে জমা হবে (সর্বোচ্চ ১০০টা এন্ট্রি রাখা হবে)
@@ -103,6 +104,14 @@ async function takeAttendanceDataFromDevice(req, res) {
 
       let mealMatched = false;
 
+      // 🧑 USER NAME বের করা হচ্ছে (meal API রেসপন্স থেকে)
+      const matchedPackage = userMeals.find((p) => p.uid === user_id);
+      const user_name =
+        matchedPackage?.name ||
+        matchedPackage?.user_name ||
+        matchedPackage?.userName ||
+        `User ${user_id}`;
+
       outer: for (const mealPackage of userMeals) {
         if (mealPackage.uid !== user_id) continue;
 
@@ -129,23 +138,25 @@ async function takeAttendanceDataFromDevice(req, res) {
 
       // 3️⃣ MOBILE ALERT সেট করা হবে — meal থাকলে GREEN + sound, না থাকলে RED + sound
       if (!mealMatched) {
-        console.log(`🔇 No meal -> mobile alert set for User ${user_id}`);
-        addLog("NO_MEAL_FOUND", { user_id });
+        console.log(`🔇 No meal -> mobile alert set for User ${user_id} (${user_name})`);
+        addLog("NO_MEAL_FOUND", { user_id, user_name });
 
         // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে RED সাউন্ড বাজাবে
         mobileAlertPending = true;
         lastMobileAlertUser = user_id;
+        lastMobileAlertName = user_name;
         lastMobileAlertType = "no_meal";
-        addLog("MOBILE_ALERT_SET", { user_id, type: "no_meal" });
+        addLog("MOBILE_ALERT_SET", { user_id, user_name, type: "no_meal" });
       } else {
-        console.log(`✅ Meal found -> mobile alert set for User ${user_id}`);
-        addLog("MEAL_FOUND", { user_id });
+        console.log(`✅ Meal found -> mobile alert set for User ${user_id} (${user_name})`);
+        addLog("MEAL_FOUND", { user_id, user_name });
 
         // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে GREEN সাউন্ড বাজাবে
         mobileAlertPending = true;
         lastMobileAlertUser = user_id;
+        lastMobileAlertName = user_name;
         lastMobileAlertType = "meal_found";
-        addLog("MOBILE_ALERT_SET", { user_id, type: "meal_found" });
+        addLog("MOBILE_ALERT_SET", { user_id, user_name, type: "meal_found" });
       }
 
     } catch (err) {
@@ -161,9 +172,10 @@ router.get("/mobile-check", (req, res) => {
   if (mobileAlertPending) {
     mobileAlertPending = false; // একবার পড়লেই রিসেট হয়ে যাবে
     const userId = lastMobileAlertUser;
+    const userName = lastMobileAlertName;
     const type = lastMobileAlertType;
-    addLog("MOBILE_ALERT_DELIVERED", { user_id: userId, type });
-    return res.json({ alert: true, user_id: userId, type });
+    addLog("MOBILE_ALERT_DELIVERED", { user_id: userId, user_name: userName, type });
+    return res.json({ alert: true, user_id: userId, user_name: userName, type });
   }
   return res.json({ alert: false });
 });
@@ -315,8 +327,9 @@ router.get("/mobile-alert", (req, res) => {
       if (data.alert) {
         playBeep(data.type);
         const label = data.type === "meal_found" ? "✅ Meal Found" : "🔇 No Meal";
+        const displayName = data.user_name || \`User \${data.user_id}\`;
         document.getElementById("lastEvent").textContent =
-          \`শেষ অ্যালার্ট: User \${data.user_id} — \${label} — \${new Date().toLocaleTimeString("bn-BD")}\`;
+          \`শেষ অ্যালার্ট: \${displayName} (ID: \${data.user_id}) — \${label} — \${new Date().toLocaleTimeString("bn-BD")}\`;
       }
     } catch (err) {
       document.getElementById("dot").classList.add("off");
