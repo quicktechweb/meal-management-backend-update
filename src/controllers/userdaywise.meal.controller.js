@@ -390,12 +390,41 @@ const daywiseGetAllMeals = async (req, res) => {
   }
 };
 
+// const daywiseGetAllMealsById = async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     const allWiseMealList = await UserAllWiseMeal.findOne({
+//       uid: id,
+//     });
+
+//     if (!allWiseMealList) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Meal not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       data: allWiseMealList,
+//     });
+//   } catch (err) {
+//     res.status(500).json({
+//       success: false,
+//       message: err.message,
+//     });
+//   }
+// };
+
 const daywiseGetAllMealsById = async (req, res) => {
   const { id } = req.params;
   try {
     const allWiseMealList = await UserAllWiseMeal.findOne({
       uid: id,
-    });
+    }).populate(
+      "user_id",
+      "information.full_name information.name_of_the_hall information.room_number"
+    );
 
     if (!allWiseMealList) {
       return res.status(404).json({
