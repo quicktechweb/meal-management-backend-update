@@ -48,12 +48,31 @@ function isTimeBetween(checkTime, startTime, endTime) {
 // 🚀 MAIN ATTENDANCE FUNCTION (/cdata)
 async function takeAttendanceDataFromDevice(req, res) {
   const content = req.rawBody;
+  const sn = req.query.SN || req.query.sn;
 
   addLog("CDATA_RECEIVED", {
     method: req.method,
     query: req.query,
     bodyPreview: content ? content.substring(0, 300) : "(empty)",
   });
+
+  // 🆕 নতুন device (SN: JJA1242600652)-এর handshake আলাদাভাবে হ্যান্ডেল করা হচ্ছে।
+  // পুরনো device (NYU7252800259) সহ বাকি সবার জন্য নিচের plain "OK" লজিক অপরিবর্তিত।
+  if (sn === "JJA1242600652" && req.query.options === "all") {
+    const optionResponse =
+`GET OPTION FROM: SN=${sn}
+Stamp=9999
+OpStamp=9999
+ErrorDelay=60
+Delay=30
+TransTimes=00:00;14:05
+TransInterval=1
+TransFlag=1111000000
+Realtime=1
+Encrypt=0`;
+    addLog("HANDSHAKE_RESPONSE_SENT", { sn });
+    return res.status(200).send(optionResponse);
+  }
 
   if (!content || content.trim() === "") {
     return res.status(200).send("OK");
