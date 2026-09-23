@@ -127,6 +127,7 @@ const KNOWN_PATHS = [
   "/sync-users",
   "/devicecmd",
   "/querydata",
+  "/import-users",
 ];
 
 router.use((req, res, next) => {
@@ -575,6 +576,7 @@ router.get("/debug", (req, res) => {
     COMMAND_SENT: "#fff3e0",
     DEVICECMD_RECEIVED: "#ede7f6",
     OTHER_REQUEST: "#fce4ec",
+    USERS_IMPORTED: "#e0f2f1",
   };
 
   const rows = debugLog
@@ -623,6 +625,33 @@ router.get("/debug", (req, res) => {
     </body>
     </html>
   `);
+});
+
+/* ------------------------------------------------------------------ */
+/* 📥 LOCAL SYNC SCRIPT ekhane machine er user name pathay              */
+/* POST /iclock/import-users  body: {"key":"...","users":[{pin,name}]} */
+/* ------------------------------------------------------------------ */
+const IMPORT_KEY = process.env.ICLOCK_IMPORT_KEY || "change-me-123";
+
+router.post("/import-users", (req, res) => {
+  try {
+    const data = JSON.parse(req.rawBody || "{}");
+    if (data.key !== IMPORT_KEY) {
+      return res.status(401).json({ ok: false, error: "wrong key" });
+    }
+    let n = 0;
+    (data.users || []).forEach((u) => {
+      if (u && u.pin && u.name) {
+        userNames[String(u.pin)] = String(u.name);
+        n++;
+      }
+    });
+    saveCache();
+    addLog("USERS_IMPORTED", { count: n });
+    return res.json({ ok: true, count: n });
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e.message });
+  }
 });
 
 /* ------------------------------------------------------------------ */
