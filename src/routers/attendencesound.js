@@ -56,21 +56,22 @@ async function takeAttendanceDataFromDevice(req, res) {
     bodyPreview: content ? content.substring(0, 300) : "(empty)",
   });
 
-  // 🆕 নতুন device (SN: JJA1242600652)-এর handshake আলাদাভাবে হ্যান্ডেল করা হচ্ছে।
-  // পুরনো device (NYU7252800259) সহ বাকি সবার জন্য নিচের plain "OK" লজিক অপরিবর্তিত।
+  // 🆕 শুধু দ্বিতীয় device (JJA1242600652)-এর handshake-এর জন্য proper option string পাঠানো হচ্ছে।
+  // প্রথম device (NYU7252800259) সহ বাকি সবাই আগের মতোই নিচের plain "OK" পাবে, কোনো পরিবর্তন নেই তাদের জন্য।
   if (sn === "JJA1242600652" && req.query.options === "all") {
     const optionResponse =
-`GET OPTION FROM: SN=${sn}
-Stamp=9999
-OpStamp=9999
-ErrorDelay=60
-Delay=30
-TransTimes=00:00;14:05
-TransInterval=1
-TransFlag=1111000000
-Realtime=1
-Encrypt=0`;
+      `GET OPTION FROM: SN=${sn}\r\n` +
+      `Stamp=9999\r\n` +
+      `OpStamp=9999\r\n` +
+      `ErrorDelay=60\r\n` +
+      `Delay=30\r\n` +
+      `TransTimes=00:00;14:05\r\n` +
+      `TransInterval=1\r\n` +
+      `TransFlag=1111000000\r\n` +
+      `Realtime=1\r\n` +
+      `Encrypt=0`;
     addLog("HANDSHAKE_RESPONSE_SENT", { sn });
+    res.set("Content-Type", "text/plain");
     return res.status(200).send(optionResponse);
   }
 
