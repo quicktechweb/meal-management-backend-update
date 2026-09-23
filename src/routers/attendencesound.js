@@ -1,52 +1,10 @@
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 const Attendance = require("../../src/models/Attendance");
 
-// (Optional) jodi apnar DB te User model thake, uncomment kore path thik korun:
-// const User = require("../../src/models/User");
-
 const router = express.Router();
-
-/* ------------------------------------------------------------------ */
-/* 📱 MOBILE ALERT QUEUE                                               */
-/* ------------------------------------------------------------------ */
-// Ek sathe onek jon fingerprint dileo alert hariye jabe na
-const mobileAlertQueue = []; // { user_id, user_name, type }
-
-/* ------------------------------------------------------------------ */
-/* 🧑 USER NAME CACHE (machine theke ashe)                             */
-/* ------------------------------------------------------------------ */
-// pin (string) -> name
-const userNameCache = {};
-
-function parseUserInfo(content) {
-  // Device format: "USER PIN=5\tName=Rahim\tPri=0\tPasswd=\tCard=..."
-  const lines = content.split("\n").filter(Boolean);
-  let count = 0;
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!/PIN=/i.test(line)) continue;
-
-    const fields = {};
-    line.split(/\t+/).forEach((token) => {
-      const cleaned = token.replace(/^USER\s+/i, "").replace(/^USERINFO\s+/i, "");
-      const idx = cleaned.indexOf("=");
-      if (idx > 0) {
-        const key = cleaned.slice(0, idx).trim().toLowerCase();
-        const val = cleaned.slice(idx + 1).trim();
-        fields[key] = val;
-      }
-    });
-
-    if (fields.pin && fields.name) {
-      userNameCache[String(fields.pin)] = fields.name;
-      count++;
-      addLog("USER_CACHED", { pin: fields.pin, name: fields.name });
-    }
-  }
-  return count;
-}
 
 /* ------------------------------------------------------------------ */
 /* 📋 DEBUG LOG (max 100 entry)                                        */
@@ -65,12 +23,112 @@ function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
+
+/* ------------------------------------------------------------------ */
+/* 🧑 USER NAMES — shudhu machine theke ashe, kono static/default nai  */
+/* (restart e harabe na, tai machine theke pawa name file e cache hoy) */
+/* ------------------------------------------------------------------ */
+const CACHE_FILE = path.join(__dirname, "iclock-machine-users.json");
+let userNames = {}; // pin(string) -> name (machine theke)
+
+try {
+  if (fs.existsSync(CACHE_FILE)) {
+    userNames = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+  }
+} catch (e) {
+  console.log("cache read error:", e.message);
+}
+
+function saveCache() {
+  try {
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(userNames, null, 2), "utf8");
+  } catch (e) {
+    console.log("cache write error:", e.message);
+  }
+}
+
+// Machine er data theke user parse: "PIN=8 Name=Tamal" / "pin=8 name=Tamal"
+function parseUserInfo(content) {
+  let changed = 0;
+  const lines = String(content).split(/\r?\n/).filter(Boolean);
+
+  for (const rawLine of lines) {
+    if (!/pin\s*=/i.test(rawLine)) continue;
+
+    const fields = {};
+    rawLine
+      .trim()
+      .split(/\t+/)
+      .forEach((token) => {
+        const cleaned = token.replace(/^(USER|USERINFO)\s+/i, "");
+        const idx = cleaned.indexOf("=");
+        if (idx > 0) {
+          fields[cleaned.slice(0, idx).trim().toLowerCase()] = cleaned
+            .slice(idx + 1)
+            .trim();
+        }
+      });
+
+    const name = fields.name || fields.username;
+    if (fields.pin && name) {
+      if (userNames[String(fields.pin)] !== name) {
+        userNames[String(fields.pin)] = name;
+        changed++;
+        addLog("USER_FROM_MACHINE", { pin: fields.pin, name });
+      }
+    }
+  }
+  if (changed > 0) saveCache();
+  return changed;
+}
+
+function getName(user_id) {
+  return userNames[String(user_id)] || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* 📤 DEVICE COMMAND QUEUE — machine ke user list pathate bola         */
+/* ------------------------------------------------------------------ */
+const pendingCommands = [];
+let cmdCounter = 200;
+let autoSyncQueued = false;
+let lastSyncQueuedAt = 0;
+
+function queueUserSync(reason) {
+  // 30 second er moddhe bar bar queue korbo na
+  if (Date.now() - lastSyncQueuedAt < 30000) return;
+  lastSyncQueuedAt = Date.now();
+
+  pendingCommands.push(
+    `C:${++cmdCounter}:DATA QUERY tablename=user,fielddesc=*,filter=*`
+  );
+  pendingCommands.push(`C:${++cmdCounter}:DATA QUERY USERINFO`);
+  addLog("SYNC_QUEUED", { reason });
+}
+
+/* ------------------------------------------------------------------ */
+/* 📱 MOBILE ALERT QUEUE                                               */
+/* ------------------------------------------------------------------ */
+const mobileAlertQueue = []; // { user_id, type, createdAt }
 
 /* ------------------------------------------------------------------ */
 /* 🔥 RAW BODY READER (ZKT device support)                             */
 /* ------------------------------------------------------------------ */
+const KNOWN_PATHS = [
+  "/cdata",
+  "/getrequest",
+  "/mobile-check",
+  "/mobile-alert",
+  "/debug",
+  "/users",
+  "/sync-users",
+  "/devicecmd",
+  "/querydata",
+];
+
 router.use((req, res, next) => {
   let body = "";
   req.on("data", (chunk) => {
@@ -78,6 +136,15 @@ router.use((req, res, next) => {
   });
   req.on("end", () => {
     req.rawBody = body;
+
+    // Onno kono path e machine request pathale dekhar jonno log
+    if (!KNOWN_PATHS.includes(req.path)) {
+      addLog("OTHER_REQUEST", {
+        method: req.method,
+        url: req.originalUrl,
+        bodyPreview: body ? body.substring(0, 300) : "(empty)",
+      });
+    }
     next();
   });
 });
@@ -94,37 +161,6 @@ function isTimeBetween(checkTime, startTime, endTime) {
   const st = toMinutes(startTime);
   const et = toMinutes(endTime);
   return ct >= st && ct <= et;
-}
-
-/* ------------------------------------------------------------------ */
-/* 🧑 NAME RESOLVER                                                    */
-/* Priority: 1) machine cache  2) meal API  3) DB (optional)  4) fallback */
-/* ------------------------------------------------------------------ */
-async function resolveUserName(user_id, matchedPackage, mealData) {
-  // 1) machine er name
-  if (userNameCache[String(user_id)]) return userNameCache[String(user_id)];
-
-  // 2) meal API
-  const fromApi =
-    matchedPackage?.name ||
-    matchedPackage?.user_name ||
-    matchedPackage?.userName ||
-    matchedPackage?.fullName ||
-    matchedPackage?.user?.name ||
-    mealData?.name ||
-    mealData?.user?.name;
-  if (fromApi) return fromApi;
-
-  // 3) DB (optional) — uncomment korle kaj korbe
-  // try {
-  //   const userDoc = await User.findOne({ user_id });
-  //   if (userDoc?.name) return userDoc.name;
-  // } catch (e) {
-  //   console.log("User DB lookup error:", e.message);
-  // }
-
-  // 4) fallback
-  return `User ${user_id}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,21 +181,14 @@ async function takeAttendanceDataFromDevice(req, res) {
     return res.status(200).send("OK");
   }
 
-  // 👤 USER INFO (machine e user add/edit korle push kore) — name cache e rakho
-  if (
-    table === "USERINFO" ||
-    table === "OPERLOG" ||
-    /(^|\t|\s)PIN=/i.test(content)
-  ) {
-    const n = parseUserInfo(content);
-    if (n > 0) console.log(`👤 ${n} user name cached from device`);
-    // OPERLOG / USERINFO te attendance nai, tai ekhanei shesh
+  // Machine jodi user info pathay, name save kore rakho
+  if (table === "USERINFO" || table === "OPERLOG" || /pin\s*=/i.test(content)) {
+    parseUserInfo(content);
     if (table !== "" && table !== "ATTLOG") {
       return res.status(200).send("OK");
     }
   }
 
-  // Attendance chhara onno table hole skip
   if (table !== "" && table !== "ATTLOG") {
     return res.status(200).send("OK");
   }
@@ -195,21 +224,17 @@ async function takeAttendanceDataFromDevice(req, res) {
 
       console.log(`📌 Attendance Saved -> User ${user_id} | ${check_in_time}`);
 
+      // Name jana na thakle machine ke user list pathate bolo
+      if (!getName(user_id)) {
+        queueUserSync(`unknown name for user ${user_id}`);
+      }
+
       // 2️⃣ GET MEAL DATA
       let userMeals = [];
-      let mealData = null;
       try {
         const mealRes = await axios.get(
           `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`
         );
-        mealData = mealRes.data;
-
-        // 🔍 API response er raw structure dekhar jonno (name kon field e ase)
-        addLog("MEAL_API_RAW", {
-          user_id,
-          raw: JSON.stringify(mealRes.data).substring(0, 500),
-        });
-
         const rawData = mealRes.data?.data;
         userMeals = rawData ? (Array.isArray(rawData) ? rawData : [rawData]) : [];
       } catch (apiErr) {
@@ -218,12 +243,6 @@ async function takeAttendanceDataFromDevice(req, res) {
       }
 
       let mealMatched = false;
-
-      // 🧑 USER NAME (uid string/number dutoi handle kora hoyeche)
-      const matchedPackage = userMeals.find(
-        (p) => String(p.uid) === String(user_id)
-      );
-      const user_name = await resolveUserName(user_id, matchedPackage, mealData);
 
       outer: for (const mealPackage of userMeals) {
         if (String(mealPackage.uid) !== String(user_id)) continue;
@@ -249,13 +268,16 @@ async function takeAttendanceDataFromDevice(req, res) {
         }
       }
 
-      // 3️⃣ MOBILE ALERT — meal thakle GREEN, na thakle RED
+      // 3️⃣ MOBILE ALERT (name delivery-r somoy resolve hobe)
       const type = mealMatched ? "meal_found" : "no_meal";
-      addLog(mealMatched ? "MEAL_FOUND" : "NO_MEAL_FOUND", { user_id, user_name });
+      addLog(mealMatched ? "MEAL_FOUND" : "NO_MEAL_FOUND", {
+        user_id,
+        name: getName(user_id) || "(machine theke ekhono pawa jayni)",
+      });
 
-      mobileAlertQueue.push({ user_id, user_name, type });
+      mobileAlertQueue.push({ user_id, type, createdAt: Date.now() });
       if (mobileAlertQueue.length > 50) mobileAlertQueue.shift();
-      addLog("MOBILE_ALERT_SET", { user_id, user_name, type });
+      addLog("MOBILE_ALERT_SET", { user_id, type });
     } catch (err) {
       console.error("Attendance Error:", err.message);
     }
@@ -267,20 +289,35 @@ async function takeAttendanceDataFromDevice(req, res) {
 /* ------------------------------------------------------------------ */
 /* 📱 MOBILE POLLS THIS (prati 1 second)                               */
 /* ------------------------------------------------------------------ */
+const NAME_WAIT_MS = 6000;
+
 router.get("/mobile-check", (req, res) => {
-  const alert = mobileAlertQueue.shift();
-  if (alert) {
-    addLog("MOBILE_ALERT_DELIVERED", alert);
-    return res.json({ alert: true, ...alert });
+  const first = mobileAlertQueue[0];
+  if (!first) return res.json({ alert: false });
+
+  const name = getName(first.user_id);
+
+  // Machine theke ekhono kono name-i ashe nai hole wait korbo na.
+  // Kintu sync kaj kore (onno user er name ache) ar ei user er name ekhono ashe nai —
+  // tahole 6 second porjonto name ashar jonno opekkha korbo.
+  const syncWorks = Object.keys(userNames).length > 0;
+  if (!name && syncWorks && Date.now() - first.createdAt < NAME_WAIT_MS) {
+    return res.json({ alert: false });
   }
-  return res.json({ alert: false });
+
+  mobileAlertQueue.shift();
+  const payload = {
+    alert: true,
+    user_id: first.user_id,
+    user_name: name, // null hole page e shudhu ID dekhabe
+    type: first.type,
+  };
+  addLog("MOBILE_ALERT_DELIVERED", payload);
+  return res.json(payload);
 });
 
 /* ------------------------------------------------------------------ */
-/* 📱 MOBILE ALERT PAGE                                                */
-/* URL: GET /iclock/mobile-alert                                       */
-/* (template literal er vitor kono backtick/${} use kora hoyni,        */
-/*  tai escape er jhamela nai)                                         */
+/* 📱 MOBILE ALERT PAGE  (GET /iclock/mobile-alert)                    */
 /* ------------------------------------------------------------------ */
 router.get("/mobile-alert", (req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8");
@@ -336,29 +373,15 @@ router.get("/mobile-alert", (req, res) => {
   }
 
   #bigName {
-    font-size: 34px;
+    font-size: 36px;
     font-weight: 700;
     margin-top: 24px;
     word-break: break-word;
     color: #fff;
   }
-  #bigInfo {
-    font-size: 18px;
-    color: #ddd;
-    margin-top: 8px;
-  }
-
-  #lastEvent {
-    margin-top: 24px;
-    font-size: 13px;
-    color: #aaa;
-  }
-
-  .badge {
-    font-size: 13px;
-    color: #666;
-    margin-top: 40px;
-  }
+  #bigInfo { font-size: 18px; color: #ddd; margin-top: 8px; }
+  #lastEvent { margin-top: 24px; font-size: 13px; color: #aaa; }
+  .badge { font-size: 13px; color: #666; margin-top: 40px; }
 </style>
 </head>
 <body id="body">
@@ -385,7 +408,6 @@ router.get("/mobile-alert", (req, res) => {
 <script>
   var SERVER_URL = window.location.origin + "/iclock/mobile-check";
   var POLL_INTERVAL_MS = 1000;
-
   var audioCtx = null;
 
   function unlockAudio() {
@@ -398,10 +420,8 @@ router.get("/mobile-alert", (req, res) => {
     osc.stop(audioCtx.currentTime + 0.05);
   }
 
-  // type: "meal_found" (green, double-beep) | "no_meal" (red, harsh beep)
   function playBeep(type) {
     if (!audioCtx) return;
-
     var body = document.getElementById("body");
 
     if (type === "meal_found") {
@@ -416,7 +436,6 @@ router.get("/mobile-alert", (req, res) => {
         osc.start(startAt);
         osc.stop(startAt + 0.18);
       });
-
       body.classList.add("alerting-green");
       setTimeout(function () { body.classList.remove("alerting-green"); }, 1200);
     } else {
@@ -428,7 +447,6 @@ router.get("/mobile-alert", (req, res) => {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 2);
-
       body.classList.add("alerting-red");
       setTimeout(function () { body.classList.remove("alerting-red"); }, 2000);
     }
@@ -442,14 +460,14 @@ router.get("/mobile-alert", (req, res) => {
       if (data.alert) {
         playBeep(data.type);
 
-        var displayName = data.user_name || ("User " + data.user_id);
         var isMeal = data.type === "meal_found";
 
-        // 🧑 boro kore name dekhano
-        document.getElementById("bigName").textContent = displayName;
+        // Machine theke name pele name, na hole shudhu ID
+        document.getElementById("bigName").textContent =
+          data.user_name ? data.user_name : "ID: " + data.user_id;
         document.getElementById("bigInfo").textContent =
-          "ID: " + data.user_id + " — " + (isMeal ? "✅ Meal আছে" : "❌ Meal নেই");
-
+          (data.user_name ? "ID: " + data.user_id + " — " : "") +
+          (isMeal ? "✅ Meal আছে" : "❌ Meal নেই");
         document.getElementById("lastEvent").textContent =
           "শেষ অ্যালার্ট: " + new Date().toLocaleTimeString("bn-BD");
       }
@@ -478,37 +496,87 @@ router.get("/mobile-alert", (req, res) => {
 /* ------------------------------------------------------------------ */
 function getRequestHandler(req, res) {
   const sn = req.query.SN || req.query.sn;
+
+  // Server shuru howar por prothom poll e ekbar user sync chaibo
+  if (!autoSyncQueued) {
+    autoSyncQueued = true;
+    queueUserSync("first device poll");
+  }
+
+  const cmd = pendingCommands.shift();
+  if (cmd) {
+    addLog("COMMAND_SENT", { sn, cmd });
+    return res.status(200).send(cmd);
+  }
+
   addLog("GETREQUEST_POLL", { sn });
   return res.status(200).send("OK");
 }
 
+// Machine command er result ekhane pathay
+function deviceCmdHandler(req, res) {
+  const content = req.rawBody || "";
+  addLog("DEVICECMD_RECEIVED", {
+    url: req.originalUrl,
+    bodyPreview: content ? content.substring(0, 400) : "(empty)",
+  });
+  parseUserInfo(content);
+  return res.status(200).send("OK");
+}
+
 /* ------------------------------------------------------------------ */
-/* 👤 Cache e kon kon user er name ache dekhar page                    */
-/* URL: GET /iclock/users                                              */
+/* 👤 Machine theke pawa user list (shudhu dekhar jonno)               */
 /* ------------------------------------------------------------------ */
+router.get("/sync-users", (req, res) => {
+  lastSyncQueuedAt = 0; // manual sync e throttle bad
+  queueUserSync("manual");
+  res.redirect("/iclock/users");
+});
+
 router.get("/users", (req, res) => {
-  const rows = Object.entries(userNameCache)
+  const rows = Object.entries(userNames)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
     .map(
       ([pin, name]) =>
-        `<tr><td style="padding:6px">${esc(pin)}</td><td style="padding:6px">${esc(name)}</td></tr>`
+        `<tr><td style="padding:8px">${esc(pin)}</td><td style="padding:8px">${esc(name)}</td></tr>`
     )
     .join("");
-  res.send(`
-    <html><head><meta charset="UTF-8"><title>Device Users</title></head>
-    <body style="font-family:sans-serif;margin:20px">
-      <h3>Machine theke pawa user name (${Object.keys(userNameCache).length} jon)</h3>
-      <table border="1" cellspacing="0" style="border-collapse:collapse">
-        <tr><th style="padding:6px">ID</th><th style="padding:6px">Name</th></tr>
-        ${rows || "<tr><td colspan='2' style='padding:12px'>এখনো কোনো name আসেনি</td></tr>"}
-      </table>
-    </body></html>
-  `);
+
+  res.send(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="5">
+<title>Machine Users</title></head>
+<body style="font-family:sans-serif;margin:20px;max-width:640px">
+  <h3>Machine theke pawa user (${Object.keys(userNames).length} jon)</h3>
+  <table border="1" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12px 0">
+    <tr><th style="padding:8px">ID</th><th style="padding:8px">Name</th></tr>
+    ${rows || "<tr><td colspan='2' style='padding:12px'>machine theke ekhono kono name ashe nai</td></tr>"}
+  </table>
+  <p><a href="/iclock/sync-users">🔄 Machine ke user list pathate bolun</a>
+   &nbsp;|&nbsp; <a href="/iclock/debug">Debug log</a></p>
+</body></html>`);
 });
 
 /* ------------------------------------------------------------------ */
 /* 🖥️ DEBUG DASHBOARD                                                  */
 /* ------------------------------------------------------------------ */
 router.get("/debug", (req, res) => {
+  const colors = {
+    CDATA_RECEIVED: "#e3f2fd",
+    NO_MEAL_FOUND: "#ffebee",
+    MEAL_FOUND: "#e8f5e9",
+    GETREQUEST_POLL: "#fafafa",
+    MOBILE_ALERT_SET: "#fff9c4",
+    MOBILE_ALERT_DELIVERED: "#e1f5fe",
+    MEAL_API_ERROR: "#ffcdd2",
+    USER_FROM_MACHINE: "#e0f2f1",
+    SYNC_QUEUED: "#fff3e0",
+    COMMAND_SENT: "#fff3e0",
+    DEVICECMD_RECEIVED: "#ede7f6",
+    OTHER_REQUEST: "#fce4ec",
+  };
+
   const rows = debugLog
     .map((log) => {
       const { time, event, ...rest } = log;
@@ -518,20 +586,7 @@ router.get("/debug", (req, res) => {
             `<b>${esc(k)}:</b> ${esc(typeof v === "object" ? JSON.stringify(v) : v)}`
         )
         .join("<br>");
-
-      const colors = {
-        CDATA_RECEIVED: "#e3f2fd",
-        NO_MEAL_FOUND: "#ffebee",
-        MEAL_FOUND: "#e8f5e9",
-        GETREQUEST_POLL: "#fafafa",
-        MOBILE_ALERT_SET: "#fff9c4",
-        MOBILE_ALERT_DELIVERED: "#e1f5fe",
-        MEAL_API_RAW: "#f3e5f5",
-        MEAL_API_ERROR: "#ffcdd2",
-        USER_CACHED: "#e0f2f1",
-      };
       const bg = colors[event] || "#ffffff";
-
       return `
         <tr style="background:${bg}">
           <td style="padding:6px;white-space:nowrap;font-size:12px;color:#555">${esc(time)}</td>
@@ -559,7 +614,7 @@ router.get("/debug", (req, res) => {
       <div class="info">
         <b>Auto-refresh:</b> প্রতি ৩ সেকেন্ডে<br>
         <b>Mobile alert page:</b> /iclock/mobile-alert<br>
-        <b>Device users (name cache):</b> /iclock/users
+        <b>Machine users:</b> /iclock/users
       </div>
       <table>
         <tr><th>সময়</th><th>ইভেন্ট</th><th>বিস্তারিত</th></tr>
@@ -575,5 +630,7 @@ router.get("/debug", (req, res) => {
 /* ------------------------------------------------------------------ */
 router.all("/cdata", takeAttendanceDataFromDevice);
 router.all("/getrequest", getRequestHandler);
+router.all("/devicecmd", deviceCmdHandler);
+router.all("/querydata", deviceCmdHandler);
 
 module.exports = router;
