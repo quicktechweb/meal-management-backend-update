@@ -21,6 +21,10 @@ function addLog(event, data = {}) {
   if (debugLog.length > 100) debugLog.pop();
 }
 
+// ⏱️ external API call — slow/hanging server যেন পুরো ফ্লো আটকে না রাখে
+const MEAL_API_TIMEOUT_MS = 4000;
+const mealApi = axios.create({ timeout: MEAL_API_TIMEOUT_MS });
+
 // 🔥 RAW BODY READER (ZKT device support)
 router.use((req, res, next) => {
   let body = "";
@@ -45,6 +49,94 @@ function isTimeBetween(checkTime, startTime, endTime) {
   return ct >= st && ct <= et;
 }
 
+// 🧑‍🤝‍🧑 একটা attendance লাইন কে attendance object এ parse করে (fast, no I/O)
+function parseAttendanceLine(line) {
+  const parts = line.trim().split(/\t+/);
+  if (parts.length < 4 || isNaN(parts[0])) return null;
+
+  const user_id = parseInt(parts[0]);
+  const rawTime = parts[1];
+  const dateObj = new Date(rawTime);
+  if (isNaN(dateObj.getTime())) return null;
+
+  return {
+    user_id,
+    dateObj,
+    attendance_date: dateObj.toISOString().split("T")[0],
+    check_in_time: dateObj.toTimeString().split(" ")[0].slice(0, 5),
+    day_name: dateObj.toLocaleDateString("en-US", { weekday: "long" }),
+    verify_mode: parseInt(parts[2]),
+    status: parseInt(parts[3]),
+  };
+}
+
+// 🍽️ একজন user এর জন্য meal check + mobile alert flag সেট করা (background এ চলে, device কে block করে না)
+async function checkMealAndAlert(entry) {
+  const { user_id, attendance_date, check_in_time, day_name } = entry;
+
+  try {
+    const mealRes = await mealApi.get(
+      `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`,
+    );
+
+    const rawData = mealRes.data?.data;
+    const userMeals = rawData ? (Array.isArray(rawData) ? rawData : [rawData]) : [];
+
+    const matchedPackage = userMeals.find((p) => p.uid === user_id);
+    const user_name =
+      matchedPackage?.name ||
+      matchedPackage?.user_name ||
+      matchedPackage?.userName ||
+      `User ${user_id}`;
+
+    let mealMatched = false;
+    let matchedMealId = null;
+    let matchedMealType = null;
+
+    outer: for (const mealPackage of userMeals) {
+      if (mealPackage.uid !== user_id) continue;
+      for (const meal of mealPackage.meals || []) {
+        if (meal.day !== day_name) continue;
+        if (isTimeBetween(check_in_time, meal.start_time, meal.end_time)) {
+          mealMatched = true;
+          matchedMealId = meal._id;
+          matchedMealType = meal.meal_type;
+          break outer;
+        }
+      }
+    }
+
+    // 📱 mobile alert flag আগে সেট — এটার জন্য PATCH শেষ হওয়া পর্যন্ত অপেক্ষা করার দরকার নেই
+    mobileAlertPending = true;
+    lastMobileAlertUser = user_id;
+    lastMobileAlertName = user_name;
+    lastMobileAlertType = mealMatched ? "meal_found" : "no_meal";
+    addLog(mealMatched ? "MEAL_FOUND" : "NO_MEAL_FOUND", { user_id, user_name });
+    addLog("MOBILE_ALERT_SET", { user_id, user_name, type: lastMobileAlertType });
+
+    if (mealMatched) {
+      console.log(`✅ Meal found -> mobile alert set for User ${user_id} (${user_name})`);
+      // 🔧 PATCH আলাদাভাবে, alert flag সেট হওয়ার পরে — fire and forget (await করা হচ্ছে না)
+      mealApi
+        .patch(
+          `https://alabadanbackendpart.alabadan.com/api/allwise-user-meal-update/${matchedMealId}`,
+          { is_attendance: true },
+        )
+        .then(() => {
+          console.log(`📌 Meal Updated -> User ${user_id} | ${matchedMealType}`);
+        })
+        .catch((err) => {
+          console.log("Meal update error:", err.message);
+        });
+    } else {
+      console.log(`🔇 No meal -> mobile alert set for User ${user_id} (${user_name})`);
+    }
+  } catch (err) {
+    console.error(`Meal check failed for user ${user_id}:`, err.message);
+    addLog("MEAL_CHECK_ERROR", { user_id, error: err.message });
+  }
+}
+
 // 🚀 MAIN ATTENDANCE FUNCTION (/cdata)
 async function takeAttendanceDataFromDevice(req, res) {
   const content = req.rawBody;
@@ -60,114 +152,41 @@ async function takeAttendanceDataFromDevice(req, res) {
   }
 
   const lines = content.trim().split("\n").filter(Boolean);
+  const entries = lines.map(parseAttendanceLine).filter(Boolean);
 
-  for (const line of lines) {
-    const parts = line.trim().split(/\t+/);
-    if (parts.length < 4 || isNaN(parts[0])) continue;
+  // ⚡ device কে সাথে সাথেই OK পাঠিয়ে দিচ্ছি — মিল চেক/external API এর জন্য device কে
+  // আর অপেক্ষা করতে হবে না, এটাই এখন পর্যন্ত সবচেয়ে বড় delay এর কারণ ছিল
+  res.status(200).send("OK");
 
-    const user_id = parseInt(parts[0]);
-    const rawTime = parts[1];
-    const dateObj = new Date(rawTime);
-    if (isNaN(dateObj.getTime())) continue;
-
-    const attendance_date = dateObj.toISOString().split("T")[0];
-    const check_in_time = dateObj.toTimeString().split(" ")[0].slice(0, 5);
-    const day_name = dateObj.toLocaleDateString("en-US", { weekday: "long" });
-    const verify_mode = parseInt(parts[2]);
-    const status = parseInt(parts[3]);
-
-    try {
-      // 1️⃣ SAVE ATTENDANCE
-      await Attendance.create({
-        user_id,
-        timestamp: dateObj,
-        attendance_date,
-        check_in_time,
-        day_name,
-        status,
-        verify_mode,
-      });
-
-      console.log(`📌 Attendance Saved -> User ${user_id} | ${check_in_time}`);
-
-      // 2️⃣ GET MEAL DATA
-      const mealRes = await axios.get(
-        `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`
-      );
-
-      const rawData = mealRes.data?.data;
-      const userMeals = rawData
-        ? Array.isArray(rawData)
-          ? rawData
-          : [rawData]
-        : [];
-
-      let mealMatched = false;
-
-      // 🧑 USER NAME বের করা হচ্ছে (meal API রেসপন্স থেকে)
-      const matchedPackage = userMeals.find((p) => p.uid === user_id);
-      const user_name =
-        matchedPackage?.name ||
-        matchedPackage?.user_name ||
-        matchedPackage?.userName ||
-        `User ${user_id}`;
-
-      outer: for (const mealPackage of userMeals) {
-        if (mealPackage.uid !== user_id) continue;
-
-        for (const meal of mealPackage.meals || []) {
-          if (meal.day !== day_name) continue;
-
-          const match = isTimeBetween(check_in_time, meal.start_time, meal.end_time);
-
-          if (match) {
-            mealMatched = true;
-            try {
-              await axios.patch(
-                `https://alabadanbackendpart.alabadan.com/api/allwise-user-meal-update/${meal._id}`,
-                { is_attendance: true }
-              );
-              console.log(`✅ Meal Updated -> User ${user_id} | ${meal.meal_type}`);
-            } catch (err) {
-              console.log("Meal update error:", err.message);
-            }
-            break outer;
-          }
-        }
+  // 💾 attendance save (দ্রুত, শুধু নিজের DB তে) — সব লাইন সমান্তরালে
+  await Promise.all(
+    entries.map(async (entry) => {
+      try {
+        await Attendance.create({
+          user_id: entry.user_id,
+          timestamp: entry.dateObj,
+          attendance_date: entry.attendance_date,
+          check_in_time: entry.check_in_time,
+          day_name: entry.day_name,
+          status: entry.status,
+          verify_mode: entry.verify_mode,
+        });
+        console.log(`📌 Attendance Saved -> User ${entry.user_id} | ${entry.check_in_time}`);
+      } catch (err) {
+        console.error("Attendance Error:", err.message);
       }
+    }),
+  );
 
-      // 3️⃣ MOBILE ALERT সেট করা হবে — meal থাকলে GREEN + sound, না থাকলে RED + sound
-      if (!mealMatched) {
-        console.log(`🔇 No meal -> mobile alert set for User ${user_id} (${user_name})`);
-        addLog("NO_MEAL_FOUND", { user_id, user_name });
-
-        // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে RED সাউন্ড বাজাবে
-        mobileAlertPending = true;
-        lastMobileAlertUser = user_id;
-        lastMobileAlertName = user_name;
-        lastMobileAlertType = "no_meal";
-        addLog("MOBILE_ALERT_SET", { user_id, user_name, type: "no_meal" });
-      } else {
-        console.log(`✅ Meal found -> mobile alert set for User ${user_id} (${user_name})`);
-        addLog("MEAL_FOUND", { user_id, user_name });
-
-        // 📱 MOBILE ALERT সেট করে দিচ্ছি — মোবাইলের পেজ এটা পড়ে GREEN সাউন্ড বাজাবে
-        mobileAlertPending = true;
-        lastMobileAlertUser = user_id;
-        lastMobileAlertName = user_name;
-        lastMobileAlertType = "meal_found";
-        addLog("MOBILE_ALERT_SET", { user_id, user_name, type: "meal_found" });
-      }
-
-    } catch (err) {
-      console.error("Attendance Error:", err.message);
-    }
-  }
-
-  return res.status(200).send("OK");
+  // 🍽️ meal check + mobile alert — এটাও সমান্তরালে (response এর পরে চলছে, device block হচ্ছে না)
+  entries.forEach((entry) => {
+    checkMealAndAlert(entry).catch((err) =>
+      console.error("checkMealAndAlert failed:", err.message),
+    );
+  });
 }
 
-// 📱 MOBILE POLLS THIS — প্রতি ১ সেকেন্ডে চেক করবে সাউন্ড বাজাতে হবে কিনা
+// 📱 MOBILE POLLS THIS — প্রতি ৫০০ মিলিসেকেন্ডে চেক করবে সাউন্ড বাজাতে হবে কিনা
 router.get("/mobile-check", (req, res) => {
   if (mobileAlertPending) {
     mobileAlertPending = false; // একবার পড়লেই রিসেট হয়ে যাবে
@@ -267,7 +286,7 @@ router.get("/mobile-alert", (req, res) => {
 
 <script>
   const SERVER_URL = window.location.origin + "/iclock/mobile-check";
-  const POLL_INTERVAL_MS = 1000;
+  const POLL_INTERVAL_MS = 500; // ⚡ 1000 থেকে কমিয়ে 500 — alert আগে ধরবে
 
   let audioCtx = null;
 
@@ -376,6 +395,7 @@ router.get("/debug", (req, res) => {
         GETREQUEST_POLL: "#fafafa",
         MOBILE_ALERT_SET: "#fff9c4",
         MOBILE_ALERT_DELIVERED: "#e1f5fe",
+        MEAL_CHECK_ERROR: "#fce4ec",
       };
       const bg = colors[event] || "#ffffff";
 
