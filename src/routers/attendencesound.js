@@ -48,32 +48,12 @@ function isTimeBetween(checkTime, startTime, endTime) {
 // 🚀 MAIN ATTENDANCE FUNCTION (/cdata)
 async function takeAttendanceDataFromDevice(req, res) {
   const content = req.rawBody;
-  const sn = req.query.SN || req.query.sn;
 
   addLog("CDATA_RECEIVED", {
     method: req.method,
     query: req.query,
     bodyPreview: content ? content.substring(0, 300) : "(empty)",
   });
-
-  // 🆕 শুধু দ্বিতীয় device (JJA1242600652)-এর handshake-এর জন্য proper option string পাঠানো হচ্ছে।
-  // প্রথম device (NYU7252800259) সহ বাকি সবাই আগের মতোই নিচের plain "OK" পাবে, কোনো পরিবর্তন নেই তাদের জন্য।
-  if (sn === "JJA1242600652" && req.query.options === "all") {
-    const optionResponse =
-      `GET OPTION FROM: SN=${sn}\r\n` +
-      `Stamp=9999\r\n` +
-      `OpStamp=9999\r\n` +
-      `ErrorDelay=60\r\n` +
-      `Delay=30\r\n` +
-      `TransTimes=00:00;14:05\r\n` +
-      `TransInterval=1\r\n` +
-      `TransFlag=1111000000\r\n` +
-      `Realtime=1\r\n` +
-      `Encrypt=0`;
-    addLog("HANDSHAKE_RESPONSE_SENT", { sn });
-    res.set("Content-Type", "text/plain");
-    return res.status(200).send(optionResponse);
-  }
 
   if (!content || content.trim() === "") {
     return res.status(200).send("OK");
@@ -110,7 +90,7 @@ async function takeAttendanceDataFromDevice(req, res) {
 
       console.log(`📌 Attendance Saved -> User ${user_id} | ${check_in_time}`);
 
-      // 2️⃣ GET MEAL DATA
+      // 2️⃣ GET MEAL DATA set 
       const mealRes = await axios.get(
         `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`
       );
