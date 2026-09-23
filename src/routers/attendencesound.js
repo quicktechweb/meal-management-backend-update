@@ -22,8 +22,19 @@ function addLog(event, data = {}) {
 }
 
 // ⏱️ external API call — slow/hanging server যেন পুরো ফ্লো আটকে না রাখে
-const MEAL_API_TIMEOUT_MS = 4000;
+// ⚠️ 4000ms এ timeout হয়ে যাচ্ছিল কারণ meal API নিজেই মাঝে মাঝে 4s এর বেশি নেয় —
+//    তাই বাড়িয়ে 10s করা হলো, প্লাস timeout হলে ১ বার retry করবে।
+const MEAL_API_TIMEOUT_MS = 10000;
 const mealApi = axios.create({ timeout: MEAL_API_TIMEOUT_MS });
+
+async function fetchWithRetry(fn, retries = 1) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries > 0) return fetchWithRetry(fn, retries - 1);
+    throw err;
+  }
+}
 
 // 🔥 RAW BODY READER (ZKT device support)
 router.use((req, res, next) => {
@@ -75,8 +86,10 @@ async function checkMealAndAlert(entry) {
   const { user_id, attendance_date, check_in_time, day_name } = entry;
 
   try {
-    const mealRes = await mealApi.get(
-      `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`,
+    const mealRes = await fetchWithRetry(() =>
+      mealApi.get(
+        `https://alabadanbackendpart.alabadan.com/api/allwise-user-meals/${user_id}`,
+      ),
     );
 
     const rawData = mealRes.data?.data;
@@ -172,8 +185,16 @@ async function takeAttendanceDataFromDevice(req, res) {
           verify_mode: entry.verify_mode,
         });
         console.log(`📌 Attendance Saved -> User ${entry.user_id} | ${entry.check_in_time}`);
+        addLog("ATTENDANCE_SAVED", {
+          user_id: entry.user_id,
+          check_in_time: entry.check_in_time,
+        });
       } catch (err) {
         console.error("Attendance Error:", err.message);
+        addLog("ATTENDANCE_ERROR", {
+          user_id: entry.user_id,
+          error: err.message,
+        });
       }
     }),
   );
@@ -396,6 +417,8 @@ router.get("/debug", (req, res) => {
         MOBILE_ALERT_SET: "#fff9c4",
         MOBILE_ALERT_DELIVERED: "#e1f5fe",
         MEAL_CHECK_ERROR: "#fce4ec",
+        ATTENDANCE_SAVED: "#f1f8e9",
+        ATTENDANCE_ERROR: "#fce4ec",
       };
       const bg = colors[event] || "#ffffff";
 
